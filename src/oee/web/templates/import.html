@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<article>
+  <p>Dataset: <strong>{{ dataset_name }}</strong> <small>({{ dataset }})</small>
+    {% if not dataset_exists %}<br><strong class="bad">File not found</strong> — set <code>OEE_DATASET_PATH</code> in <code>.env</code>.{% endif %}</p>
+  <p><small>The workbook is only read, never saved. Importing again adds nothing that is already in the database.</small></p>
+  <form method="post" action="/import">
+    <button type="submit"{% if not dataset_exists %} disabled{% endif %}>Import dataset</button>
+  </form>
+  <p class="example-link"><a href="/import/example.xlsx" download>⬇ Download example file (.xlsx)</a><br>
+    <small>One example shift showing the required sheets and columns; the first sheet explains each column.</small></p>
+</article>
+
+{% if error %}
+<article class="notice error" role="alert"><p><strong>Import failed — nothing was imported.</strong></p><p>{{ error }}</p></article>
+{% endif %}
+
+{% if result %}
+{% set passed = result.checks | selectattr("ok") | list | length %}
+<article class="notice" role="status"><p><strong>Import finished.</strong></p></article>
+<h2>Added</h2>
+<table class="striped">
+  <tbody>
+    <tr><th>Shifts</th><td>{{ result.shifts_added }}</td></tr>
+    <tr><th>Hours</th><td>{{ result.hours_added }}</td></tr>
+    <tr><th>Downtime events</th><td>{{ result.issues_added }}</td></tr>
+    <tr><th>Reject records</th><td>{{ result.quality_added }}</td></tr>
+    <tr><th>Hours skipped (already imported)</th><td>{{ result.hours_skipped }}</td></tr>
+  </tbody>
+</table>
+
+{% if result.checks %}
+<h2>Integrity checks</h2>
+<p>{{ passed }} / {{ result.checks | length }} shifts passed. <small>— = cannot be verified (cached value missing in the file).</small></p>
+<div class="overflow-auto">
+<table class="striped">
+  <thead><tr><th>Shift</th><th>Model</th>{% for key, label in check_labels.items() %}<th>{{ label }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for c in result.checks %}
+    {% set m = result.models.get(c.shift_id) %}
+    <tr>
+      <td>{{ c.shift_id }}</td>
+      <td>{% if m %}{{ m.rate_per_hour | num }} pcs/h · {{ m.duration_min | hours }} h{% endif %}</td>
+      {% for key in check_labels %}
+        {% set v = c.checks.get(key) %}
+        <td data-check="{{ 'ok' if v else ('na' if v is none else 'fail') }}">{{ "✓" if v else ("—" if v is none else "✗") }}</td>
+      {% endfor %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

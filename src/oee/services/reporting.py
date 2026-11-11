@@ -35,7 +35,7 @@ from oee.domain.validation import (
     has_errors,
     validate_hour,
 )
-from oee.persistence.models import HourlyReportRow, IssueEvent, ProductionRecord, Shift
+from oee.persistence.models import HourlyReportRow, IssueEvent, ProductionRecord, QualityRecord, Shift
 from oee.persistence.repositories import (
     QualityLine,
     active_issues_for_hours,
@@ -309,3 +309,153 @@ def save_hour(
         session.rollback()
         raise
     return SaveResult(True, hour_status, shift.status, submitted, messages)
+
+
+# --- čítanie pre stránku Hourly Reporting (TASK §5.2) ---------------------------------------------
+
+
+@dataclass(frozen=True)
+class HourTile:
+    hour_no: int
+    hour_id: str
+    start: datetime
+    end: datetime
+    planned_min: int
+    target: float
+    status: Literal["empty", "submitted", "needs_attention"]
+    produced: int | None
+    rejects: int | None
+    problems: int
+
+
+@dataclass(frozen=True)
+class ShiftOverview:
+    shift: Shift
+    status: str
+    """Stav pri čítaní (`effective_status`)."""
+    tiles: tuple[HourTile, ...]
+
+    @property
+    def hours_submitted(self) -> int:
+        return sum(t.status != "empty" for t in self.tiles)
+
+
+@dataclass(frozen=True)
+class IssueRow:
+    issue_id: str
+    client_key: str
+    code: str
+    duration_min: float
+    start: time | None
+    continues_issue_id: str | None
+    comment: str | None
+
+
+@dataclass(frozen=True)
+class DefectRow:
+    code: str | None
+    """None = „Unspecified defect" (rozpis nebol zadaný)."""
+    qty: int
+    comment: str | None
+
+
+@dataclass(frozen=True)
+class HourState:
+    """Uložený stav hodiny pre predvyplnenie formulára."""
+
+    tile: HourTile
+    issues: tuple[IssueRow, ...]
+    defects: tuple[DefectRow, ...]
+    previous_issues: tuple[IssueRow, ...]
+    """Udalosti predchádzajúcej hodiny — kandidáti na „pokračovanie" (TASK §3.4 pravidlo 3)."""
+
+
+def get_shift(session: Session, shift_id: str) -> Shift:
+    shift = session.get(Shift, shift_id)
+    if shift is None:
+        raise ShiftNotFound(shift_id)
+    return shift
+
+
+def _issue_row(e: IssueEvent) -> IssueRow:
+    return IssueRow(
+        issue_id=e.issue_id,
+        client_key=e.client_key or e.issue_id,
+        code=e.issue_type_code,
+        duration_min=e.duration_min,
+        start=None if e.start_at is None else e.start_at.time(),
+        continues_issue_id=e.continues_issue_id,
+        comment=e.comment,
+    )
+
+
+def shift_overview(session: Session, shift_id: str, *, now_local: datetime) -> ShiftOverview:
+    """Hlavička zmeny a N dlaždíc hodín (stav, Produced, Rejects, počet problémov).
+
+    Raises:
+        ShiftNotFound: zmena neexistuje.
+    """
+    shift = get_shift(session, shift_id)
+    plan = _plan(shift)
+    ids = [hour_id_for(shift.line_id, shift.date, s.hour_no) for s in plan.slots]
+    rows = {
+        r.hour_id: r
+        for r in session.scalars(select(HourlyReportRow).where(HourlyReportRow.shift_id == shift_id))
+    }
+    production = {
+        p.hour_id: p
+        for p in session.scalars(select(ProductionRecord).where(ProductionRecord.hour_id.in_(ids)))
+    }
+    problems: dict[str, int] = {}
+    for event in active_issues_for_hours(session, ids):
+        problems[event.hour_id] = problems.get(event.hour_id, 0) + 1
+    tiles = []
+    for slot, hour_id in zip(plan.slots, ids, strict=True):
+        row, prod = rows.get(hour_id), production.get(hour_id)
+        status: Literal["empty", "submitted", "needs_attention"] = (
+            "empty" if row is None else "needs_attention" if row.status == "needs_attention" else "submitted"
+        )
+        tiles.append(
+            HourTile(
+                hour_no=slot.hour_no,
+                hour_id=hour_id,
+                start=slot.start,
+                end=slot.end,
+                planned_min=slot.planned_min,
+                target=slot.target,
+                status=status,
+                produced=None if prod is None else prod.produced_qty,
+                rejects=None if prod is None else prod.rejects_qty,
+                problems=problems.get(hour_id, 0),
+            )
+        )
+    return ShiftOverview(shift, effective_status(shift, now_local=now_local), tuple(tiles))
+
+
+def hour_state(overview: ShiftOverview, session: Session, hour_no: int) -> HourState:
+    """Uložené dáta hodiny `hour_no` (prázdne, ak ešte nebola odoslaná).
+
+    Raises:
+        LookupError: hodina nie je súčasťou zmeny.
+    """
+    tile = next((t for t in overview.tiles if t.hour_no == hour_no), None)
+    if tile is None:
+        raise LookupError(f"hour {hour_no} is not part of shift {overview.shift.shift_id}")
+    previous = next((t for t in overview.tiles if t.hour_no == hour_no - 1), None)
+    defects = tuple(
+        DefectRow(q.defect_type_code, q.qty, q.comment)
+        for q in session.scalars(
+            select(QualityRecord)
+            .where(QualityRecord.hour_id == tile.hour_id)
+            .order_by(QualityRecord.created_at)
+        )
+        if q.defect_type_code is not None  # „Unspecified" vzniká automaticky — formulár ho neukazuje
+    )
+    return HourState(
+        tile=tile,
+        issues=tuple(_issue_row(e) for e in active_issues_for_hours(session, [tile.hour_id])),
+        defects=defects,
+        previous_issues=()
+        if previous is None
+        else tuple(_issue_row(e) for e in active_issues_for_hours(session, [previous.hour_id])),
+    )

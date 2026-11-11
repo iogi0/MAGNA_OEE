@@ -106,3 +106,38 @@ def test_pareto_of_empty_shift_is_empty() -> None:
     from oee.domain.kpi import EMPTY_CASCADE
 
     assert loss_pareto(EMPTY_CASCADE, stop_pcs={}, defect_qty={}) == []
+
+
+# --- Pareto podľa kategórie (prepínač TASK §7E) ----------------------------------------------------
+
+
+def test_group_by_category_sums_pcs_and_shares_and_sorts() -> None:
+    from oee.domain.losses import LossBucket, group_by_category
+
+    buckets = [
+        LossBucket("unattributed_speed_loss", None, 42, 0.4375),
+        LossBucket("ST-038", "downtime", 25, 0.2604, "Camera malfunction"),
+        LossBucket("ST-046", "downtime", 13, 0.1354, "Leak test issue"),
+        LossBucket("ST-047", "downtime", 10, 0.1042, "Leak test issue"),
+        LossBucket("Q-030", "quality", 3, 0.03125, "Camera malfunction"),
+        LossBucket("unspecified_defect", "quality", 3, 0.03125, None),
+    ]
+    grouped = group_by_category(buckets)
+    assert [(b.bucket, b.pcs) for b in grouped] == [
+        ("unattributed_speed_loss", 42),
+        ("Camera malfunction", 28),
+        ("Leak test issue", 23),
+        ("unspecified_defect", 3),
+    ]
+    camera = grouped[1]
+    assert camera.share_of_losses == pytest.approx(0.2604 + 0.03125)
+    assert camera.category == "Camera malfunction"
+    assert camera.kind is None  # kategória môže miešať prestoje a zmätky
+    assert sum(b.pcs for b in grouped) == sum(b.pcs for b in buckets)  # bez straty a zdvojenia
+
+
+def test_group_by_category_keeps_none_share() -> None:
+    from oee.domain.losses import LossBucket, group_by_category
+
+    grouped = group_by_category([LossBucket("ST-001", "downtime", 5, None, "Material shortage")])
+    assert [(b.bucket, b.share_of_losses) for b in grouped] == [("Material shortage", None)]

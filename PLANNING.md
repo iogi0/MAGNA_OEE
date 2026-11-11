@@ -6,8 +6,8 @@ Zdroj požiadaviek: `TASK.md` v2.3. Pravidlá práce: `CLAUDE.md` (cyklus `task-
 | | |
 |---|---|
 | **Aktuálna fáza** | M1 Základ |
-| **Ďalšia úloha** | **P0-17** — UI Hourly Reporting — čaká na súhlas vlastníka |
-| **Hotové úlohy** | 16 / 25 (P0) |
+| **Ďalšia úloha** | **P0-23** — implementácia hotová, chýba revízia spec-reviewer; potom P0-24 |
+| **Hotové úlohy** | 22 / 25 (P0) |
 | **Posledná aktualizácia** | 11.11.2026 |
 
 ### Denník práce
@@ -33,6 +33,19 @@ Zdroj požiadaviek: `TASK.md` v2.3. Pravidlá práce: `CLAUDE.md` (cyklus `task-
 | 11.11.2026 | P0-16 | `src/oee/services/codebook.py` (`get_active_codes` z DB, `list_codes`, `set_top10` — presne 10 ST + 10 Q, bez duplicít, neznámych kódov a „Other"; Other vždy aktívne; `Top10Error`). `src/oee/web/forms.py` (formulár → `ShiftModelConfig`: dĺžka v h, cieľ OEE v %, chyby prevodu + doménová validácia s názvom poľa; prázdny formulár bez predvolených hodnôt, D8). Routy `GET /settings` (`?example=1` = Fill with example, nič neukladá), `POST /settings/preview` (HTMX fragment, čísla z `build_shift_plan`), `POST /settings/model` (422 pri chybe, inak nová verzia + 303), `POST /settings/top10`. Šablóny `settings.html`, `_model_preview.html`. `domain/shift_model`: `ShiftPlan.goal_good_pcs`. Katalóg: `load_example_settings` (+ `product`, `grace_min` v príklade; grace 60 podľa TASK §4.3). Testy: `tests/unit/test_codebook.py` (11), `tests/api/test_settings.py` (24: 6 h / 45 ks/h, nevalidné vstupy, snapshot starých zmien, Top-10, deaktivovaný kód → V11 a zostáva v histórii), +2 katalóg, +1 doména. TDD; spec-reviewer: bez blokujúcich, pripomienky zapracované (cieľ v kusoch v doméne, hodiny mimo šablóny, bez default grace, silnejšie testy). **671 passed (37 golden)**, ruff + mypy OK. Ručne v prehliadači: Fill with example (440 / 374), živý prepočet (45 ks/h → 330), chyba prestávky mimo zmeny, Top-10; bez chýb v konzole (do DB sa v prehliadači neukladalo). |
 | 11.11.2026 | P0-16 úpravy (D14) | Odstránený prepínač operátor / manažér (route `/role`, cookie, `data-role`, CSS), texty UI bez rolí. „Save shift model" je hlavné tlačidlo, „Fill with example" malé sekundárne. Testy rolí nahradené `test_single_interface_without_roles` a `test_role_endpoint_is_gone`. **674 passed**, ruff + mypy OK; tlačidlá overené v prehliadači. |
 | 11.11.2026 | P0-16 úpravy (D15) | Ručný výber Top-10 nahradený číselníkom: `services/codebook.py` (`get_active_codes` = všetky kódy + Other, `list_codes`, `code_categories`, `add_code` — ďalšie číslo v rade, kontrola názvu, duplicity a kategórie, `CodeError`). Settings: zoznam ST / Q a formulár „Add a problem code" (`POST /settings/codes`). Texty V11 bez „Top-10". Testy prepísané (`test_codebook.py` 10, `test_settings.py`). **674 passed (37 golden)**, ruff + mypy OK; overené v prehliadači. |
+| 11.11.2026 | P0-17 | `services/reporting.py`: `shift_overview` (hlavička, N dlaždíc: stav, Produced, Rejects, počet problémov, target hodiny), `hour_state` (predvyplnenie, udalosti predchádzajúcej hodiny na pokračovanie; „Unspecified" sa neukazuje). `web/forms.py`: `parse_hour_form` (prevod polí, Rejects predvolene 0, chyby prevodu bez 500). Routy `GET/POST /report` (výber dňa, predvolene dnes; bez modelu → odkaz na Settings, 422), `GET /report/{shift_id}?hour=n`, `POST /report/{shift_id}/hour/{n}` (HTMX fragment s chybami alebo `HX-Redirect`; bez JS 303/422), `GET …/row?kind=issue|defect` (HTMX „+ Add problem / defect", celý číselník + Other, D15). Šablóny `report.html`, `report_shift.html`, `_hour_form.html`, `_issue_row.html`, `_defect_row.html`. Testy `tests/api/test_hourly_reporting.py` (31, konfigurácia 6 h / 45 ks/h). spec-reviewer: bez blokujúcich, pripomienky zapracované (banner podľa stavu zmeny, jeden `now_local`, zrozumiteľná chyba). **704 passed (37 golden)**, ruff + mypy OK. Ručne v prehliadači (dočasná DB v scratchpade): hodina na 2 akcie (55 → Enter → 1/8), Other bez komentára → inline chyba, hodnoty zostanú; bez chýb v konzole. |
+| 11.11.2026 | P0-18 (+ úprava P0-17) | `GET /import` (nakonfigurovaný dataset `OEE_DATASET_PATH`, tlačidlo neaktívne, ak súbor chýba), `POST /import` volá tú istú službu `import_excel` a ukáže počty (zmeny, hodiny, udalosti, záznamy zmätkov, preskočené hodiny), odvodený model zmeny a kontroly TASK §11.7 po zmenách (✓ / ✗ / —); `DatasetError` → 422, nič sa neimportuje. `importer._read`: `OSError` (napr. zamknutý súbor) → `DatasetError`. Šablóna `import.html`, filter `hours`. P0-17: tlačidlo „Open shift" zarovnané s výberom dátumu (`.inline-form`). Testy `tests/api/test_import_page.py` (6: počty 21/168/33/112, 21/21 kontrol, opakovaný import 0 + 168 preskočených, Excel nezmenený (SHA-256), chýbajúci a poškodený súbor, zlyhaná a neoveriteľná kontrola). spec-reviewer: bez blokujúcich, pripomienky zapracované. **711 passed (37 golden)**, ruff + mypy OK. Ručne v prehliadači (dočasná DB): 21/168/33/112, 21/21 zmien OK; bez chýb v konzole. |
+| 11.11.2026 | P0-18 doplnok | Vzorový Excel na stiahnutie (požiadavka vlastníka): `services/import_template.py` `build_example_workbook` — hárky `Instructions` (popis stĺpcov), `Vyroba_hodiny`, `Prestoje`, `NOK_detail`, `Dashboard!E51`; hlavičky = konštanty importéra, model zmeny z `example_shift_model.yaml` (D8), kódy z katalógu; generuje sa v pamäti, dataset sa nečíta. Route `GET /import/example.xlsx`, odkaz hneď pod „Import dataset". Testy: `tests/unit/test_import_template.py` (2: hlavičky; vzor sa importuje bez chýb, všetky kontroly §11.7 OK), +1 API. systematic-debugging: importér odvodzuje pracovné dni z dátumov v súbore (očakávané). **716 passed (37 golden)**, ruff + mypy OK; overené v prehliadači. |
+| 11.11.2026 | P0-19 | `domain/losses.group_by_category` (Pareto podľa kategórie, súčty bez zdvojenia). `services/shift_view.py`: `status_label` (completed / in_progress n/N — provisional / incomplete cez `effective_status` / edited), `sorted_issues` (čas, dĺžka, vplyv), `group_issues` (bez zlúčenia), `pareto`, `waterfall_steps`, `charts_payload`. Routy `/shift` (výber, `?id` → presmerovanie s escapovaním), `/shift/{id}?sort=&group=&pareto=`, `/api/shift/{id}/charts`. Šablóna `shift.html` (A: 4 KPI karty, stav voči cieľu v p. b., D/S/R v kusoch; B: waterfall + tabuľka; C: hodinový OEE s čiarou cieľa, ▼ pod cieľom, ⏱ prestoj ≥ 5 min, „not submitted"; D: udalosti, triedenie, zoskupenie, zmätky; E: Pareto typ / kategória), `static/shift_charts.js` (vendorovaný Chart.js, iba kreslí; hranice waterfallu pripraví server). Filtre `signed`, `pp`, `pct2`. Testy: `tests/api/test_shift_dashboard.py` (15; golden 25.11. = §12.3, API = ShiftAnalytics, JS bez aritmetiky, provisional 6 h / 45 ks/h), +2 doména. spec-reviewer: bez blokujúcich, pripomienky zapracované. **736 passed (46 golden)**, ruff + mypy OK. Ručne v prehliadači (dočasná DB s importom): A–E pre 25.11. sedia s §12.3, 3 grafy vykreslené, bez chýb v konzole. Mimo rozsahu: stĺpec waterfallu „Technical losses" nie je rozložený podľa kategórií (kategórie majú minúty, nie kusy); podtabuľka zmätkov ukazuje typ a počty po hodinách oddelene (kontrakt nemá hodinu × typ). |
+| 11.11.2026 | P0-19 úpravy | Podľa vlastníka: tlačidlo „Show" zarovnané so `select` (`.inline-form select`); grafy v kontajneri s pevnou výškou (`.chart-box`, `maintainAspectRatio: false`), tabuľka waterfallu pod grafom; popisy hodnôt nad stĺpcami (waterfall: hodnota so znamienkom zo servera `waterfall_steps[].value`), čiara cieľa OEE cez celú šírku s popisom na pozadí. Test JS spresnený: zakázaná aritmetika nad dátami zo servera, pixelová geometria plátna povolená. **736 passed**; overené v prehliadači. |
+| 11.11.2026 | P0-19 úpravy 2 | Odsadenie pod výberom zmeny (`.inline-form` margin-bottom). Waterfall: spojnice schodov (úrovne `waterfall_steps[].connect` zo servera — Target → C−D → Produced → Good; JS ich iba kreslí), zaoblené stĺpce. Test API rozšírený o úrovne spojníc. **736 passed**; overené v prehliadači. |
+| 11.11.2026 | UI mierka | Podľa vlastníka kompaktnejšie UI (`static/app.css`): základné písmo 15 px (Pico na širokých obrazovkách zväčšoval až na 125 %), menšie nadpisy, odsadenia a polia formulárov, šírka obsahu max. 1200 px, menšie KPI karty a dlaždice, grafy 15rem. Iba CSS; overené v prehliadači (1400 px), bez chýb v konzole. |
+| 11.11.2026 | UI grafy | Grafy v ráme (`.chart-box`: pozadie karty, jemný okraj, zaoblenie, tieň, vnútorný odstup; výška 17rem). Popis čiary cieľa s pozadím karty. Overené v prehliadači, testy dashboardu prechádzajú. |
+| 11.11.2026 | UI grafy 2 | Popis „OEE goal" sa kreslí za koncom čiary v rezervovanom pravom okraji grafu (`layout.padding.right`), v dvoch riadkoch, mimo stĺpcov. Overené v prehliadači, bez chýb v konzole. |
+| 11.11.2026 | P0-20 | `domain/period.py`: `top_by_frequency` (D15: výskyty ↓, minúty/kusy ↓, kód; doplnenie štartovacím zoznamom s nulami), `losses_by_category`. `services/history.py`: ISO týždeň / mesiac (`parse_week`, `parse_month`, `neighbour_periods`), `shift_history` (riadok = `build_shift` + stav dát a cieľa), `top10`, `category_losses`, `series_payload`. Routy `/history` (filter dátumov, predvolene mesiac poslednej zmeny), `/history/week?week=YYYY-Www`, `/history/month?month=YYYY-MM` (422 pri chybnom období), navigácia ‹ ›. Šablóny `history.html`, `history_period.html`, `_history_tabs.html`; `static/history_charts.js` (OEE po zmenách s cieľom, klik → dashboard; trend OEE/A/P/Q po týždňoch). Mesiac: tabuľka typov, straty podľa kategórie, zmätky podľa typu, týždne s „partial", Top-10 z rebríčka s pripnutou nepriradenou stratou rýchlosti; týždeň: najčastejšie a najdlhšie problémy. Testy: `tests/api/test_history.py` (16: 21 riadkov, filter, §12.1, §12.2, Top-10 november a prázdna DB, nový kód v Top-10, navigácia, 422, JS bez aritmetiky), +4 doména. spec-reviewer: bez blokujúcich. **760 passed (55 golden)**, ruff + mypy OK. Ručne v prehliadači (1400 px): všetky 3 záložky, grafy, bez chýb v konzole. Pozn.: vstavaný Chromium nezobrazuje `input type=month/week` → textové pole so vzorom + tlačidlá ‹ ›. |
+| 11.11.2026 | P0-21 | `services/analytics._links`: páry z Top-10 najčastejších kódov obdobia (`top_by_frequency`, D15) namiesto `active_top10`; kategória prestoja z DB + nové `Catalog.process_for_category` (kód zo Settings dostane správny typ väzby). `services/history.py`: `ranking_view` (väzby pri riadku — iba informácia), `linked_defects_by_stop`, `TREND_ARROWS`. Routy `/history/ranking`, `/history/links` (`?month` alebo `?week`), záložky v histórii. Šablóna `history_analysis.html`: Ranking s pripnutým riadkom „Unattributed speed loss" (odkaz na `#speed-by-hour` v mesiaci), triedy A/B/C, trend ↑↓→, „linked + combined impact" mimo skóre; Links: 5 párov, okno, lift, extra, typ, istota, „Correlation is not a proven cause". Dashboard zmeny: odznak „linked defect Q-xxx" pri udalosti (väzby za mesiac zmeny). Mesiac: sekcia nepriradenej straty rýchlosti po hodinách zmeny. Filter `num1` (odhady na 1 desatinné miesto, bez „-0"). Testy: `tests/api/test_ranking_links_pages.py` (11, golden §12.5 a §12.8), +2 analytika (nový kód vo väzbách, same_process z kategórie), +1 katalóg. Oprava pasce: `Result.tuples()` je v SQLAlchemy 2.1 deprecated → rozbalenie riadkov. spec-reviewer: bez blokujúcich, pripomienky zapracované. **774 passed (63 golden)**, ruff + mypy OK. Ručne v prehliadači: Ranking, Links, odznaky na 25.11.; bez chýb v konzole. |
+| 11.11.2026 | P0-22 | `src/oee/ai/client.py`: `OllamaClient` (`/api/chat` so `stream: false`, `format` = JSON schéma, temperature 0,2, timeout, zámok; iba localhost/127.0.0.1), `health()` cez `/api/tags` (nikdy nevyhodí výnimku, aj pri nečakanom JSON), chyby `AiTimeout` / `AiUnavailable` / `AiInvalidOutput`, protokol `Generator`, `FakeGenerator`, `facts_hash` (SHA-256 kanonického JSON). `persistence/repositories.py`: cache `ai_output` — `AiKey`, `get_ai_output`, `claim_ai_output` (`pending` cez savepoint, bez dvojitého generovania, atomické prevzatie zaseknutého `pending` podmieneným UPDATE), `finish_ai_output`. Web: `app.state.ai_client` (None pri `OEE_AI_ENABLED=false`), `GET /health` (stav AI, bez chyby, keď Ollama nebeží). `scripts/check_ollama.py` pripravený pre testovací notebook (tu bez Ollama skončí zrozumiteľne s exit 1). Testy `tests/ai/test_client.py` (25, `httpx.MockTransport`). Ollama sa neinštalovala (D2). spec-reviewer: bez blokujúcich, pripomienky zapracované. **801 passed (63 golden)**, ruff + mypy OK. |
+| 11.11.2026 | P0-23 (bez revízie) | `domain/facts.py` (`shift_summary_facts` zo `ShiftAnalytics`, `link_facts` z `ProblemLink`; podiely v %). `ai/validator.py` (čísla podľa jazyka en/sk vrátane NBSP, tolerancia polovice poslednej číslice, zlý desatinný oddeľovač = chyba; kódy iba z faktov / povoleného zoznamu; časy, dátumy, ID zmeny osobitne; `validate_payload`). `ai/fallback.py` (Shift Summary §7.F a vysvetlenie väzby §8.6 en/sk, bez odporúčaní — D1; texty prejdú validátorom). `ai/prompts/shift_summary.md`, `link_explanation.md` (verzia v1), `ai/prompting.py` (`load_prompt`, `SCHEMAS`), `ai/engine.py` (`run_task`: neplatný výstup → 1 opakovanie → fallback; timeout/nedostupnosť → hneď fallback). Testy: `tests/ai/test_validator.py` (19), `test_fallback.py` (8, golden 25.11. + konfigurácia 6 h / 45 ks/h), `test_engine.py` (11). **850 passed (69 golden)**, ruff + mypy OK. **Zostáva:** revízia spec-reviewer, potom zaškrtnúť P0-23. |
 
 ## Denník rozhodnutí (odchýlky a spresnenia voči TASK.md)
 | # | Rozhodnutie | Dôvod | Dopad |
@@ -52,6 +65,7 @@ Zdroj požiadaviek: `TASK.md` v2.3. Pravidlá práce: `CLAUDE.md` (cyklus `task-
 | D13 | Zdroj aktívnych kódov pre hlásenie je **DB** (`active_top10`, `services.codebook.get_active_codes`), `top10.yaml` je iba predvolený stav seedu | Top-10 sa mení v Settings (D9) a seed výber neprepisuje | P0-17 berie kódy z `get_active_codes` |
 | D14 | **Jedno rozhranie** bez rozdelenia na operátora a manažéra: prepínač roly (`/role`, cookie) je odstránený; Settings je iba formulár vstupov | rozhodnutie vlastníka (11.11.2026) | všetky stránky sú dostupné z jednej navigácie; texty UI nespomínajú roly; test `test_single_interface_without_roles` |
 | D15 | **Top-10 sa nevyberá ručne.** Hlásenie ponúka celý číselník + Other; Settings iba zobrazí číselník a umožní pridať nový kód; Top-10 najčastejších problémov ukazujú dva dashboardy (týždeň, mesiac); bez dát štartovací zoznam TASK §5.4 s nulami. Nahrádza D9 (ručný výber) a mení TASK §5.4 | rozhodnutie vlastníka (11.11.2026) | `services.codebook`: `get_active_codes` = celý číselník, `add_code`, `set_top10` zrušené; route `/settings/top10` → `/settings/codes`; `active_top10` = iba štartovací zoznam; CLAUDE.md pravidlo 5 upravené; P0-17, P0-20, P0-21 doplnené |
+| D16 | Odznak „linked defect" v udalostiach Shift Dashboardu berie väzby **za kalendárny mesiac zmeny**; väzby sa hľadajú medzi Top-10 najčastejšími kódmi obdobia | TASK §8.6 neurčuje obdobie odznaku; mesiac má dosť dát na štatistiku a zodpovedá Monthly | dashboard počíta `build_period` za mesiac zmeny; golden §12.8 bez zmeny |
 
 **D10 — pravidlá:**
 - **Trend (§8.4).**
@@ -386,7 +400,7 @@ Každá úloha = jeden cyklus `task-cycle`. Stĺpec **Test** = čo musí byť ze
     - číselník sa iba zobrazuje, nový kód dostane ďalšie číslo v rade (ST-049, Q-035 …) a je hneď voliteľný (D15);
     - „Other" je vždy k dispozícii; neznámy kód hlásenie odmietne (V11)
   - *Test:* `tests/api/test_settings.py`
-- [ ] **P0-17 UI Hourly Reporting** (TASK §5.1–5.3)
+- [x] **P0-17 UI Hourly Reporting** ✅ 11.11.2026 (TASK §5.1–5.3)
   - *Závisí od:* P0-14, P0-15, P0-16
   - *Rozsah:*
     - výber dátumu zmeny (predvolene dnes; iný dátum pre demo a dopĺňanie, TASK §4.3);
@@ -399,13 +413,13 @@ Každá úloha = jeden cyklus `task-cycle`. Stĺpec **Test** = čo musí byť ze
     - Other bez komentára → chyba;
     - ručná kontrola v prehliadači
   - *Test:* `tests/api/test_hourly_reporting.py`
-- [ ] **P0-18 UI Import**
+- [x] **P0-18 UI Import** ✅ 11.11.2026
   - *Závisí od:* P0-09, P0-15
   - *AC:* import cez UI = import cez službu; zobrazí počty a výsledky kontrol
   - *Test:* `tests/api/test_import_page.py`
 
 ### M4 Manažér
-- [ ] **P0-19 Shift Dashboard A–E + provisional** (TASK §7)
+- [x] **P0-19 Shift Dashboard A–E + provisional** ✅ 11.11.2026 (TASK §7)
   - *Závisí od:* P0-10, P0-15
   - *Rozsah:*
     - **hlavička:** výber zmeny, stav (`completed` / `in_progress n/N — provisional` / `incomplete` / „edited");
@@ -420,7 +434,7 @@ Každá úloha = jeden cyklus `task-cycle`. Stĺpec **Test** = čo musí byť ze
     - stránka 25.11. obsahuje hodnoty §12.3;
     - `/api/shift/{id}/charts` vracia tie isté čísla ako `ShiftAnalytics` (žiadny výpočet v šablóne ani v JS)
   - *Test:* `tests/api/test_shift_dashboard.py`
-- [ ] **P0-20 Production History: Shift History, Weekly, Monthly** (TASK §8.1–8.3)
+- [x] **P0-20 Production History: Shift History, Weekly, Monthly** ✅ 11.11.2026 (TASK §8.1–8.3)
   - *Závisí od:* P0-13, P0-15
   - *Rozsah:*
     - **Shift History:** tabuľka zmien so stavom (dáta + cieľ OEE), filter dátumov, klik → dashboard;
@@ -436,7 +450,7 @@ Každá úloha = jeden cyklus `task-cycle`. Stĺpec **Test** = čo musí byť ze
     - týždne = §12.2;
     - mesiac = §12.1
   - *Test:* `tests/api/test_history.py`
-- [ ] **P0-21 Záložky Problem Ranking a Problem Links** (TASK §8.4, §8.6)
+- [x] **P0-21 Záložky Problem Ranking a Problem Links** ✅ 11.11.2026 (TASK §8.4, §8.6)
   - *Závisí od:* P0-11, P0-12, P0-13, P0-19, P0-20
   - *Rozsah:*
     - záložka Ranking s pripnutým riadkom unattributed speed loss a stĺpcami „pridružený zmätok" a „súhrnný
@@ -453,7 +467,7 @@ Každá úloha = jeden cyklus `task-cycle`. Stĺpec **Test** = čo musí byť ze
   - *Test:* `tests/api/test_ranking_links_pages.py`
 
 ### M5 Lokálne AI (bez inštalácie Ollama)
-- [ ] **P0-22 `ai/client` — klient Ollama** (TASK §13.4)
+- [x] **P0-22 `ai/client` — klient Ollama** ✅ 11.11.2026 (TASK §13.4)
   - *Závisí od:* P0-07, P0-08
   - *Rozsah:*
     - `/api/chat` (`stream: false`, `format` = JSON schéma, temperature 0,2, timeout); predvolene
@@ -560,7 +574,7 @@ Odporúčané poradie pre jedného vývojára: číselné (01 → 25) rešpektuj
 ## Definition of Done (TASK §16) — sledovanie
 | # | Kritérium | Úloha | Stav |
 |---|---|---|---|
-| 1 | Hodina bez problémov ≤ 2 akcie, viac problémov, úprava, bez duplicít, V1–V12, V14 | P0-05, P0-14, P0-17 | ☐ |
+| 1 | Hodina bez problémov ≤ 2 akcie, viac problémov, úprava, bez duplicít, V1–V12, V14 | P0-05, P0-14, P0-17 | ✅ |
 | 2 | všetky hodiny zmeny (napr. 8/8) → `completed` + analytika; po grace → `incomplete` | P0-14 | ✅ (služba) |
 | 3 | Import: 21 / 168 / 33 / 112, opakovaný import bez duplicít, kontroly §11.7 | P0-09 | ✅ |
 | 4 | Golden §12.1, §12.2, §12.3, 20.11., §12.7 (±0,01 p. b.; kusy/minúty presne) | P0-04, P0-10, P0-13 | ◐ §12.7 ✅ |
@@ -572,7 +586,7 @@ Odporúčané poradie pre jedného vývojára: číselné (01 → 25) rešpektuj
 | 10 | AI bez internetu; žiadne cloudové AI API v kóde/konfigurácii | P0-01, P0-22 | ☐ (offline beh → testovací notebook) |
 | 11 | Shift Summary 25.11. obsahuje fakty §7.F, čísla overené validátorom (odporúčania → P2, D1) | P0-23, P0-24 | ☐ |
 | 12 | Problem Links = §12.8; demo zmena nájde ST-038 → Q-030 a AI ho vysvetlí | P0-12, P0-13, P0-24, P0-25 | ☐ |
-| 13 | V UI celý číselník ST / Q + Other s komentárom; Top-10 najčastejších v dashboarde týždňa a mesiaca (D15) | P0-17, P0-20 | ☐ |
+| 13 | V UI celý číselník ST / Q + Other s komentárom; Top-10 najčastejších v dashboarde týždňa a mesiaca (D15) | P0-17, P0-20 | ✅ |
 | D8 | Target sa počíta z konfigurácie manažéra; iná konfigurácia (napr. 6 h, 45 ks/h) funguje end-to-end | P0-02, P0-16, P0-17 | ☐ |
 | 14 (P1) | Patterns §12.6 bez falošných nálezov | P1 | ☐ |
 

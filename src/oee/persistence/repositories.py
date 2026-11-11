@@ -6,13 +6,14 @@ SQLite CHECK nevidí iné tabuľky, preto invarianty kontroluje kód (ARCHITECTU
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
-from typing import NamedTuple
+from datetime import datetime, timedelta
+from typing import Any, NamedTuple
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from oee.persistence.models import IssueEvent, ProductionRecord, QualityRecord
+from oee.persistence.models import AiOutput, IssueEvent, ProductionRecord, QualityRecord
 
 
 class QualityInvariantError(ValueError):
@@ -101,4 +102,68 @@ def soft_delete_issue(session: Session, issue_id: str, now: datetime) -> None:
         raise KeyError(issue_id)
     event.deleted_at = now
     event.updated_at = now
+    session.flush()
+
+
+# --- cache výstupu AI (ARCHITECTURE §5, §10.6) -------------------------------------------------------
+
+
+class AiKey(NamedTuple):
+    """Kľúč `ai_output`: zmena faktov, modelu, jazyka alebo verzie promptu = nový záznam."""
+
+    kind: str
+    subject_key: str
+    facts_hash: str
+    model: str
+    lang: str
+    prompt_version: str
+
+
+def _ai_filter(key: AiKey) -> list[Any]:
+    return [getattr(AiOutput, name) == value for name, value in key._asdict().items()]
+
+
+def get_ai_output(session: Session, key: AiKey) -> AiOutput | None:
+    return session.scalar(select(AiOutput).where(*_ai_filter(key)))
+
+
+def claim_ai_output(
+    session: Session, key: AiKey, *, now: datetime, stale_after: timedelta
+) -> AiOutput | None:
+    """Rezervuje generovanie: vloží `pending` a vráti ho; ak už záznam existuje, vráti None.
+
+    Výnimka: `pending` starší ako `stale_after` (proces padol) sa prevezme — vráti sa ten istý riadok
+    s novým `updated_at`. Hotový záznam (ok / fallback / error) sa nikdy neprevezme.
+    """
+    row = AiOutput(**key._asdict(), status="pending", payload=None, created_at=now, updated_at=now)
+    try:
+        with session.begin_nested():
+            session.add(row)
+    except IntegrityError:
+        existing = get_ai_output(session, key)
+        if existing is None or existing.status != "pending" or now - existing.updated_at <= stale_after:
+            return None
+        # atomické prevzatie: uspeje iba proces, ktorý videl rovnaký starý `updated_at`
+        taken = session.execute(
+            update(AiOutput)
+            .where(
+                AiOutput.id == existing.id,
+                AiOutput.status == "pending",
+                AiOutput.updated_at == existing.updated_at,
+            )
+            .values(updated_at=now)
+            .execution_options(synchronize_session=False)
+        )
+        if taken.rowcount != 1:  # type: ignore[attr-defined]
+            return None
+        session.refresh(existing)
+        return existing
+    return row
+
+
+def finish_ai_output(
+    session: Session, row: AiOutput, *, status: str, payload: dict[str, Any] | None, now: datetime
+) -> None:
+    """Uloží výsledok rezervovaného záznamu (`ok` / `fallback` / `error`); commit robí volajúci."""
+    row.status, row.payload, row.updated_at = status, payload, now
     session.flush()

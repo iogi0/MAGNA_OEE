@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -81,3 +81,25 @@ def loss_pareto(
     ]
     items.sort(key=lambda b: (-b[2], b[0]))
     return [LossBucket(name, kind, pcs, ratio(pcs, losses), category) for name, kind, pcs, category in items]
+
+
+def group_by_category(buckets: Sequence[LossBucket]) -> list[LossBucket]:
+    """Pareto podľa kategórie (prepínač „typ / kategória", TASK §7E): súčet kusov a podielov.
+
+    Vedro bez kategórie (nepriradená strata rýchlosti, zmätky bez rozpisu) zostane samostatné.
+    Kategória môže obsahovať prestoje aj zmätky, preto má `kind` None. Poradie: kusy ↓, potom názov.
+    """
+    pcs: dict[str, float] = {}
+    share: dict[str, float | None] = {}
+    category: dict[str, str | None] = {}
+    kind: dict[str, BucketKind | None] = {}
+    for b in buckets:
+        key = b.category or b.bucket
+        if key not in pcs:
+            pcs[key], share[key], category[key] = 0.0, 0.0, b.category
+            kind[key] = None if b.category else b.kind
+        pcs[key] += b.pcs
+        previous = share[key]
+        share[key] = None if previous is None or b.share_of_losses is None else previous + b.share_of_losses
+    order = sorted(pcs, key=lambda k: (-pcs[k], k))
+    return [LossBucket(k, kind[k], pcs[k], share[k], category[k]) for k in order]

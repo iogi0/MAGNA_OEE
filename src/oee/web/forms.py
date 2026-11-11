@@ -8,11 +8,14 @@ Prázdny formulár nemá žiadne predvolené hodnoty (D8) — príklad sa načí
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
-from datetime import time
+from datetime import date, time
 
+from pydantic import ValidationError
 from starlette.datastructures import FormData
 
+from oee.contracts.hourly_report import HourlyReport
 from oee.domain.shift_model import (
     MINUTES_PER_HOUR,
     WEEKDAYS,
@@ -193,3 +196,123 @@ def parse_model_form(data: FormData) -> ModelForm:
     assert grace is not None
     form.config, form.product, form.grace_min = config, product, int(grace)
     return form
+
+
+# --- formulár hodiny (TASK §5.3) ------------------------------------------------------------------
+
+ISSUE_FIELDS = (
+    "issue_id",
+    "issue_key",
+    "issue_code",
+    "issue_duration",
+    "issue_start",
+    "issue_continues",
+    "issue_comment",
+)
+DEFECT_FIELDS = ("defect_code", "defect_qty", "defect_comment")
+HHMM_PATTERN = re.compile(r"^\d{2}:\d{2}$")
+
+
+@dataclass
+class HourForm:
+    """Zadané hodnoty (na znovuzobrazenie), chyby prevodu a výsledný `HourlyReport`."""
+
+    produced: str
+    rejects: str
+    issues: list[dict[str, str]]
+    defects: list[dict[str, str]]
+    errors: list[str] = field(default_factory=list)
+    report: HourlyReport | None = None
+
+
+def _rows(data: FormData, names: tuple[str, ...]) -> list[dict[str, str]]:
+    columns = {n: [str(v) for v in data.getlist(n)] for n in names}
+    count = max((len(c) for c in columns.values()), default=0)
+    rows = [{n: (columns[n][i].strip() if i < len(columns[n]) else "") for n in names} for i in range(count)]
+    return [r for r in rows if any(r.values())]
+
+
+def parse_hour_form(data: FormData, *, shift_id: str, hour_id: str, day: date, hour_no: int) -> HourForm:
+    """Polia formulára → `HourlyReport`. Obchodné pravidlá (V1–V14) overí až `save_hour` (doména)."""
+    form = HourForm(
+        produced=str(data.get("produced") or "").strip(),
+        rejects=str(data.get("rejects") or "").strip() or "0",  # TASK §5.3: Rejects predvolene 0
+        issues=_rows(data, ISSUE_FIELDS),
+        defects=_rows(data, DEFECT_FIELDS),
+    )
+    errors = form.errors
+
+    def count(raw: str, label: str) -> int | None:
+        if raw.isdigit():
+            return int(raw)
+        errors.append(f"{label} must be a whole number ≥ 0")
+        return None
+
+    produced = count(form.produced, "Produced")
+    rejects = count(form.rejects, "Rejects")
+
+    issues: list[dict[str, object]] = []
+    for n, row in enumerate(form.issues, start=1):
+        if not row["issue_code"]:
+            errors.append(f"Problem {n}: choose a problem type")
+        try:
+            duration = float(row["issue_duration"].replace(",", "."))
+        except ValueError:
+            duration = math.nan
+        if not (math.isfinite(duration) and duration > 0):
+            errors.append(f"Problem {n}: Duration must be greater than 0 minutes")
+        start = row["issue_start"]
+        if start and not (HHMM_PATTERN.match(start) and _valid_time(start)):
+            errors.append(f"Problem {n}: Start time must be HH:MM")
+        issues.append(
+            {
+                "issue_id": row["issue_id"] or None,
+                "client_key": row["issue_key"] or f"{hour_id}-{n}",
+                "issue_type_code": row["issue_code"],
+                "duration_min": duration,
+                "start_time": start or None,
+                "continues_issue_id": row["issue_continues"] or None,
+                "comment": row["issue_comment"] or None,
+            }
+        )
+
+    defects: list[dict[str, object]] = []
+    for n, row in enumerate(form.defects, start=1):
+        if not row["defect_code"]:
+            errors.append(f"Defect {n}: choose a defect type")
+        if not (row["defect_qty"].isdigit() and int(row["defect_qty"]) > 0):
+            errors.append(f"Defect {n}: Quantity must be a whole number greater than 0")
+        defects.append(
+            {
+                "defect_type_code": row["defect_code"],
+                "qty": int(row["defect_qty"]) if row["defect_qty"].isdigit() else 0,
+                "comment": row["defect_comment"] or None,
+            }
+        )
+
+    if errors or produced is None or rejects is None:
+        return form
+    try:
+        form.report = HourlyReport.model_validate(
+            {
+                "hour_id": hour_id,
+                "shift_id": shift_id,
+                "date": day,
+                "hour_no": hour_no,
+                "produced": produced,
+                "rejects": rejects,
+                "rejects_by_defect": defects,
+                "issues": issues,
+            }
+        )
+    except ValidationError as exc:
+        form.errors.extend(f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors())
+    return form
+
+
+def _valid_time(value: str) -> bool:
+    try:
+        time.fromisoformat(value)
+    except ValueError:
+        return False
+    return True

@@ -259,3 +259,10 @@ def test_invalid_example_settings_rejected(tmp_path: Path, key: str, value: obje
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     with pytest.raises(CatalogError):
         load_example_settings(path)
+
+
+def test_process_for_category_works_without_code_in_catalog() -> None:
+    catalog = load_catalog()
+    # kód pridaný v Settings (D15) nie je v codes.yaml — proces sa určí z jeho kategórie v DB
+    assert catalog.process_for_category("camera", "Q-030") == "Camera"
+    assert catalog.process_for_category("general", "Q-030") is None

@@ -123,7 +123,10 @@ def _read(path: Path) -> _Dataset:
         # nepodporované rozšírenia (grafy, podmienené formáty);
         # v read-only režime sa hlásia až pri čítaní riadkov
         warnings.simplefilter("ignore", UserWarning)
-        return _read_workbook(path)
+        try:
+            return _read_workbook(path)
+        except OSError as exc:  # napr. súbor zamknutý v Exceli
+            raise DatasetError(f"cannot read {path.name}: {exc.strerror or exc}") from exc
 
 
 def _read_workbook(path: Path) -> _Dataset:

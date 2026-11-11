@@ -7,9 +7,22 @@
 </article>
 {% else %}
 <article>
-  <p>Shift {{ line }} · {{ today.isoformat() }} · start {{ model.config.start.strftime("%H:%M") }},
-     {{ hours }} h, {{ model.config.rate_per_hour | num }} pcs/h.</p>
-  <p><small>Hourly entry form arrives in P0-17.</small></p>
+  <p>Active shift model: start {{ model.config.start.strftime("%H:%M") }}, {{ hours }} h,
+     {{ model.config.rate_per_hour | num }} pcs/h.</p>
+  <form method="post" action="/report" class="actions inline-form">
+    <label>Shift date
+      <input type="date" name="day" value="{{ today.isoformat() }}" required></label>
+    <button type="submit">Open shift</button>
+  </form>
+  <p><small>Today by default; pick another date to fill in or correct an earlier shift.</small></p>
 </article>
+{% endif %}
+{% if recent %}
+<h2>Recent shifts</h2>
+<ul>
+  {% for s in recent %}
+  <li><a href="/report/{{ s.shift_id }}">{{ s.date.isoformat() }} · {{ s.shift_id }}</a> <small>({{ s.status }})</small></li>
+  {% endfor %}
+</ul>
 {% endif %}
 {% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+{% set shift = overview.shift %}
+{% set done = overview.hours_submitted %}
+{% set total = overview.tiles | length %}
+<article class="shift-header">
+  <div><small>Date</small><strong>{{ shift.date.isoformat() }}</strong></div>
+  <div><small>Line</small><strong>{{ shift.line_id }}</strong></div>
+  <div><small>Shift</small><strong>{{ shift.shift_id }}</strong></div>
+  <div><small>Product</small><strong>{{ shift.product_id }}</strong></div>
+  <div><small>Status</small><strong>{{ overview.status }}</strong></div>
+  <div><small>Progress</small><strong>{{ done }}/{{ total }}</strong></div>
+</article>
+
+{% if saved %}<article class="notice" role="status"><p><strong>{{ saved }}.</strong></p></article>{% endif %}
+{% if overview.status == "completed" %}
+<article class="notice" role="status"><p><strong>Shift completed — analysis is ready</strong> in the
+  <a href="/shift">Shift Dashboard</a>.</p></article>
+{% endif %}
+
+<nav class="tiles" aria-label="Hours of the shift">
+  {% for t in overview.tiles %}
+  <a href="/report/{{ shift.shift_id }}?hour={{ t.hour_no }}" class="tile {{ t.status }}{% if t.hour_no == current_hour %} current{% endif %}"
+     data-testid="tile-{{ t.hour_no }}" data-status="{{ t.status }}"{% if t.hour_no == selected %} aria-current="true"{% endif %}>
+    <strong>Hour {{ t.hour_no }}</strong>
+    <small>{{ t.start.strftime("%H:%M") }}–{{ t.end.strftime("%H:%M") }} · target {{ t.target | num }}</small>
+    {% if t.status == "empty" %}
+    <span>empty</span>
+    {% else %}
+    <span>{{ t.produced }} pcs · {{ t.rejects }} rejects</span>
+    <span>{{ t.problems }} problem{{ "" if t.problems == 1 else "s" }}{% if t.status == "needs_attention" %} · needs attention{% endif %}</span>
+    {% endif %}
+  </a>
+  {% endfor %}
+</nav>
+
+{% if state is defined %}
+{% include "_hour_form.html" %}
+{% else %}
+<p>Select an hour to report.</p>
+{% endif %}
+<p><a href="/report">← Choose another date</a></p>
+{% endblock %}

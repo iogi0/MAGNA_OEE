@@ -81,11 +81,15 @@ class Catalog:
 
     def link_type(self, stop_code: str, defect_code: str) -> tuple[LinkType, str | None]:
         """(`same_process`, názov procesu) alebo (`cross_process`, None)."""
-        category = self.category_of(stop_code)
+        process = self.process_for_category(self.category_of(stop_code), defect_code)
+        return ("same_process", process) if process else ("cross_process", None)
+
+    def process_for_category(self, stop_category: str, defect_code: str) -> str | None:
+        """Proces, do ktorého patrí kategória prestoja aj zmätok (aj pre kód pridaný v Settings, D15)."""
         for p in self.processes:
-            if category in p.stop_categories and defect_code in p.defects:
-                return "same_process", p.name
-        return "cross_process", None
+            if stop_category in p.stop_categories and defect_code in p.defects:
+                return p.name
+        return None
 
 
 # --- načítanie ----------------------------------------------------------------------------------

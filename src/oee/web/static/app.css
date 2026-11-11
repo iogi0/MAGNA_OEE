@@ -11,3 +11,79 @@ tr.added td { background: var(--pico-ins-color); color: #fff; }
 .actions button { width: auto; margin: 0; }
 .actions .small { margin: 0; padding: .35rem .75rem; font-size: .85em; }
 .add-code button { width: auto; }
+.shift-header { display: flex; flex-wrap: wrap; gap: .75rem 2rem; }
+.shift-header div { display: flex; flex-direction: column; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: .75rem; margin-bottom: 1.5rem; }
+.tiles .tile { display: flex; flex-direction: column; padding: .75rem; border: 2px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); text-decoration: none; color: inherit; }
+.tiles .tile.submitted { border-color: var(--pico-ins-color); }
+.tiles .tile.needs_attention { border-color: #e0a000; }
+.tiles .tile.current { box-shadow: 0 0 0 3px var(--pico-primary-focus); }
+.tiles .tile[aria-current="true"] { background: var(--pico-primary-background); color: var(--pico-primary-inverse); }
+.row-card { border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); padding: .75rem; margin-bottom: .75rem; }
+input.big { font-size: 1.2em; }
+.actions label { margin: 0; }
+/* pole s popisom a tlačidlo v jednom riadku: zarovnanie podľa spodnej hrany */
+.inline-form { align-items: flex-end; margin-bottom: 1.25rem; }
+.inline-form input, .inline-form select, .inline-form button { margin-bottom: 0; }
+.bad { color: var(--pico-del-color); }
+.example-link { margin-top: .75rem; text-align: left; }
+.kpi-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1rem; }
+.kpi-cards .kpi { display: flex; flex-direction: column; margin: 0; }
+.kpi-cards .kpi strong { font-size: 1.6em; line-height: 1.2; }
+.kpi-cards .kpi.main.below_goal { border-left: .3rem solid var(--pico-del-color); }
+.kpi-cards .kpi.main.goal_met { border-left: .3rem solid var(--pico-ins-color); }
+table.compact td, table.compact th { padding: .35rem .5rem; }
+.toolbar a[aria-current="true"] { font-weight: 700; text-decoration: none; }
+.flag { font-size: .8em; padding: .05rem .35rem; border: 1px solid var(--pico-muted-border-color); border-radius: .25rem; }
+/* grafy s pevnou výškou (Chart.js inak rastie so šírkou stĺpca) */
+.chart-box {
+  position: relative;
+  height: 17rem;
+  margin-bottom: 1rem;
+  padding: .9rem 1rem .6rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: .6rem;
+  box-shadow: var(--pico-card-box-shadow);
+}
+
+/* Kompaktnejšia mierka (Pico na širokých obrazovkách zväčšuje písmo až na 125 %). */
+:root {
+  --pico-font-size: 93.75%;
+  --pico-line-height: 1.45;
+  --pico-spacing: .875rem;
+  --pico-typography-spacing-vertical: .875rem;
+  --pico-form-element-spacing-vertical: .5rem;
+  --pico-form-element-spacing-horizontal: .75rem;
+  --pico-block-spacing-vertical: 1rem;
+  --pico-block-spacing-horizontal: 1rem;
+}
+@media (min-width: 1280px) { :root { --pico-font-size: 93.75%; } }
+@media (min-width: 1536px) { :root { --pico-font-size: 100%; } }
+h1 { font-size: 1.75rem; margin-bottom: 1rem; }
+h2 { font-size: 1.35rem; margin-top: 1.5rem; }
+h3 { font-size: 1.1rem; }
+.container { max-width: 1200px; }
+article { padding: .9rem 1rem; margin-bottom: 1rem; }
+.kpi-cards { gap: .75rem; }
+.kpi-cards .kpi { padding: .75rem .9rem; }
+.tiles .tile { padding: .55rem .65rem; font-size: .92em; }
+section { margin-bottom: 1.5rem; }
+.tabs { display: flex; gap: 1.25rem; margin-bottom: 1rem; border-bottom: 1px solid var(--pico-muted-border-color); }
+.tabs a { padding: .4rem 0; text-decoration: none; color: var(--pico-muted-color); }
+.tabs a[aria-current="page"] { color: var(--pico-primary); border-bottom: 2px solid var(--pico-primary); }
+tr.pinned td { background: var(--pico-card-sectioning-background-color); }
+progress { width: 5rem; margin: 0 .4rem 0 0; vertical-align: middle; }
+nav.tabs { justify-content: flex-start; }
+.tabs a { margin: 0; }
+.top10 td:nth-child(2), .top10 td:nth-child(4) { white-space: nowrap; }
+.top10 progress { width: 3.5rem; }
+.inline-form input[size] { width: auto; }
+.inline-form a[role="button"] { margin: 0; }
+.class { display: inline-block; min-width: 1.4em; text-align: center; border-radius: .25rem; font-weight: 700; font-size: .85em; }
+.class-A { background: var(--pico-del-color); color: #fff; }
+.class-B { background: #c9a227; color: #111; }
+.class-C { background: var(--pico-muted-border-color); }
+.flag.linked { text-decoration: none; border-color: var(--pico-primary); color: var(--pico-primary); }
+.conf-high { border-color: var(--pico-ins-color); }
+.conf-medium { border-color: #c9a227; }

@@ -106,3 +106,51 @@ def test_ranking_and_stats_present(db: Session, catalog: Catalog) -> None:
     assert pa.issue_stats[0].lost_pcs == pytest.approx(10)
     assert {r.code for r in pa.problem_ranking} == {"ST-038", "unspecified_defect"}  # zmätky bez rozpisu
     assert pa.defect_stats == ()  # „Unspecified" nemá kód zmätku
+
+
+def test_links_consider_most_frequent_codes_not_only_starting_list(
+    session: Session, catalog: Catalog
+) -> None:
+    """D15: väzby sa hľadajú medzi Top-10 najčastejšími kódmi obdobia, teda aj mimo štartovacieho zoznamu."""
+    from oee.persistence.repositories import replace_hour_quality
+    from tests.builders import AUDIT_NOW, hour_id_for
+
+    seed_codebook(session, catalog)
+    assert "ST-002" not in catalog.top10_stop and "Q-001" not in catalog.top10_defect
+    days = [date(2026, 12, 7), date(2026, 12, 8), date(2026, 12, 9)]
+    for day in days:
+        hours = {h: (50, 2 if h == 2 else 1 if h == 6 else 0) for h in range(1, 9)}
+        add_shift(session, MODEL_A, day, hours, status="completed")
+        for hour_no, qty in ((2, 2), (6, 1)):  # rozpis zmätkov: Q-001 v okne prestoja aj mimo neho
+            replace_hour_quality(
+                session, hour_id_for(day, hour_no), [("Q-001", qty)], source="manual", now=AUDIT_NOW
+            )
+        add_issue(session, day, 2, "ST-002", 10, datetime.combine(day, time(7, 10)))
+    pa = build_period(session, days[0], days[-1], line="L01", period_type="range", catalog=catalog, now=NOW)
+    link = next((x for x in pa.problem_links if (x.cause, x.effect) == ("ST-002", "Q-001")), None)
+    assert link is not None, [(x.cause, x.effect) for x in pa.problem_links]
+    assert (link.support, link.q_in_window) == (3, 6)
+
+
+def test_new_settings_code_gets_same_process_link_from_its_category(
+    session: Session, catalog: Catalog
+) -> None:
+    """Kód pridaný v Settings (D15) nie je v YAML katalógu; typ väzby sa určí z jeho kategórie v DB."""
+    from oee.persistence.repositories import replace_hour_quality
+    from oee.services.codebook import add_code
+    from tests.builders import AUDIT_NOW, hour_id_for
+
+    seed_codebook(session, catalog)
+    new = add_code(session, kind="stop", name="Camera cable loose", category="camera")
+    days = [date(2026, 12, 7), date(2026, 12, 8), date(2026, 12, 9)]
+    for day in days:
+        hours = {h: (50, 2 if h == 2 else 1 if h == 6 else 0) for h in range(1, 9)}
+        add_shift(session, MODEL_A, day, hours, status="completed")
+        for hour_no, qty in ((2, 2), (6, 1)):
+            replace_hour_quality(
+                session, hour_id_for(day, hour_no), [("Q-030", qty)], source="manual", now=AUDIT_NOW
+            )
+        add_issue(session, day, 2, new.code, 10, datetime.combine(day, time(7, 10)))
+    pa = build_period(session, days[0], days[-1], line="L01", period_type="range", catalog=catalog, now=NOW)
+    link = next(x for x in pa.problem_links if (x.cause, x.effect) == (new.code, "Q-030"))
+    assert (link.link_type, link.process) == ("same_process", "Camera")

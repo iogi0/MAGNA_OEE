@@ -55,7 +55,7 @@ from oee.domain.correlation import HourObs, StopEvent, find_problem_links
 from oee.domain.downtime import CountedSegment, DowntimeEvent, DowntimeSummary, count_downtime
 from oee.domain.kpi import SECONDS_PER_MINUTE, Cascade, ratio, sum_cascades
 from oee.domain.losses import UNSPECIFIED, event_flags, goal_status, hour_flags, loss_pareto
-from oee.domain.period import first_pass_quality, is_week_complete, period_goal
+from oee.domain.period import first_pass_quality, is_week_complete, period_goal, top_by_frequency
 from oee.domain.ranking import Kind, ProblemStats, RankedProblem, WeekInfo, rank_problems
 from oee.domain.shift_model import ShiftModelConfig, ShiftPlan, build_shift_plan, config_from_snapshot
 from oee.domain.validation import speed_loss_exceeds_tolerance
@@ -72,6 +72,7 @@ from oee.persistence.repositories import active_issues_for_hours
 
 WEEKDAYS: tuple[Weekday, ...] = get_args(Weekday)
 PeriodType = Literal["week", "month", "range"]
+TOP_LINK_CODES = 10  # TASK §8.6: páry z Top-10 ST × Top-10 Q (D15: Top-10 podľa frekvencie)
 
 
 class ShiftNotFound(LookupError):
@@ -495,14 +496,20 @@ def _weeks(cores: Sequence[_ShiftCore], start: date, end: date) -> list[tuple[st
 def _links(
     session: Session, cores: Sequence[_ShiftCore], problems: Mapping[str, _ProblemAcc], catalog: Catalog
 ) -> list[ProblemLink]:
-    stop_codes = set(
-        session.scalars(select(IssueType.code).where(IssueType.active_top10, IssueType.is_other.is_(False)))
-    )
-    defect_codes = set(
-        session.scalars(
-            select(DefectType.code).where(DefectType.active_top10, DefectType.is_other.is_(False))
-        )
-    )
+    # D15: páry sa hľadajú medzi Top-10 najčastejšími kódmi obdobia (bez dát štartovací zoznam TASK §5.4)
+    other = {catalog.other_stop, catalog.other_defect}
+    stop_counts = {
+        code: (len(a.roots), a.minutes)
+        for code, a in problems.items()
+        if a.kind == "downtime" and code not in other
+    }
+    defect_counts = {
+        code: (a.records, a.lost) for code, a in problems.items() if a.kind == "quality" and code not in other
+    }
+    stop_codes = {t.code for t in top_by_frequency(stop_counts, catalog.top10_stop, size=TOP_LINK_CODES)}
+    defect_codes = {
+        t.code for t in top_by_frequency(defect_counts, catalog.top10_defect, size=TOP_LINK_CODES)
+    }
     hours: list[HourObs] = []
     events: dict[str, tuple[str, str, set[int]]] = {}
     for core in cores:
@@ -523,11 +530,18 @@ def _links(
             events.setdefault(root, (codes.get(root, e.issue_type_code), sid, set()))[2].add(
                 hour_no[e.hour_id]
             )
+    # efektívna kategória z DB — kód pridaný v Settings (D15) v YAML katalógu nie je
+    stop_category = {
+        code: category
+        for code, category in session.execute(
+            select(IssueType.code, IssueType.category).where(IssueType.code.in_(stop_codes))
+        )
+    }
     same_process = {
         (st, q): process
         for st in stop_codes
         for q in defect_codes
-        if (process := catalog.link_type(st, q)[1]) is not None
+        if (process := catalog.process_for_category(stop_category.get(st, ""), q)) is not None
     }
     results = find_problem_links(
         hours,
