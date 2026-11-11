@@ -1,8 +1,0 @@
-{
-  "hour_status": "needs_attention",
-  "shift_status": "in_progress",
-  "hours_submitted": 4,
-  "messages": [
-    { "level": "warning", "rule": "V3", "field": "produced", "message": "Produced exceeds what is possible in run time" }
-  ]
-}
