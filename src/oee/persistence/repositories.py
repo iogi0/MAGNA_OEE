@@ -108,6 +108,10 @@ def soft_delete_issue(session: Session, issue_id: str, now: datetime) -> None:
 # --- cache výstupu AI (ARCHITECTURE §5, §10.6) -------------------------------------------------------
 
 
+RETRYABLE = ("pending", "error")
+"""Stavy, ktoré sa po `stale_after` prevezmú: zaseknuté generovanie a nedostupné AI."""
+
+
 class AiKey(NamedTuple):
     """Kľúč `ai_output`: zmena faktov, modelu, jazyka alebo verzie promptu = nový záznam."""
 
@@ -132,8 +136,9 @@ def claim_ai_output(
 ) -> AiOutput | None:
     """Rezervuje generovanie: vloží `pending` a vráti ho; ak už záznam existuje, vráti None.
 
-    Výnimka: `pending` starší ako `stale_after` (proces padol) sa prevezme — vráti sa ten istý riadok
-    s novým `updated_at`. Hotový záznam (ok / fallback / error) sa nikdy neprevezme.
+    Výnimka: `pending` (proces padol) alebo `error` (AI bolo nedostupné) starší ako `stale_after`
+    sa prevezme — vráti sa ten istý riadok ako `pending` s novým `updated_at`.
+    Hotový záznam (ok / fallback) sa nikdy neprevezme.
     """
     row = AiOutput(**key._asdict(), status="pending", payload=None, created_at=now, updated_at=now)
     try:
@@ -141,17 +146,17 @@ def claim_ai_output(
             session.add(row)
     except IntegrityError:
         existing = get_ai_output(session, key)
-        if existing is None or existing.status != "pending" or now - existing.updated_at <= stale_after:
+        if existing is None or existing.status not in RETRYABLE or now - existing.updated_at <= stale_after:
             return None
         # atomické prevzatie: uspeje iba proces, ktorý videl rovnaký starý `updated_at`
         taken = session.execute(
             update(AiOutput)
             .where(
                 AiOutput.id == existing.id,
-                AiOutput.status == "pending",
+                AiOutput.status == existing.status,
                 AiOutput.updated_at == existing.updated_at,
             )
-            .values(updated_at=now)
+            .values(updated_at=now, status="pending")
             .execution_options(synchronize_session=False)
         )
         if taken.rowcount != 1:  # type: ignore[attr-defined]

@@ -8,15 +8,16 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Literal
 from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -24,14 +25,23 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from oee import __version__
-from oee.ai.client import OllamaClient
+from oee.ai.client import Generator, OllamaClient
 from oee.catalog.loader import Catalog, load_catalog, load_example_settings
 from oee.config import Settings, get_settings
 from oee.contracts.shift_analytics import ShiftAnalytics
 from oee.domain.shift_model import MINUTES_PER_HOUR, build_shift_plan
 from oee.persistence.db import init_db, make_engine, make_session_factory
-from oee.persistence.models import Shift
+from oee.persistence.models import DefectType, IssueType, Shift
 from oee.persistence.seed import seed_codebook
+from oee.services.ai_orchestrator import (
+    AiConfig,
+    AiJob,
+    AiState,
+    link_job,
+    lookup,
+    run_job,
+    shift_summary_job,
+)
 from oee.services.analytics import PeriodType, build_period, build_shift
 from oee.services.analytics import ShiftNotFound as AnalyticsShiftNotFound
 from oee.services.codebook import CodeError, add_code, code_categories, get_active_codes, list_codes
@@ -54,6 +64,7 @@ from oee.services.history import (
 )
 from oee.services.import_template import build_example_workbook
 from oee.services.importer import DatasetError, ImportResult, import_excel
+from oee.services.link_view import link_matrix, link_occurrences
 from oee.services.reporting import (
     NoActiveShiftModel,
     ShiftNotFound,
@@ -79,6 +90,7 @@ from oee.services.shift_view import (
 from oee.web.forms import HourForm, ModelForm, empty_form, form_from_config, parse_hour_form, parse_model_form
 
 WEB_DIR = Path(__file__).resolve().parent
+logger = logging.getLogger(__name__)
 WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 # kontroly TASK §11.7 po zmenách (kľúče z `services.importer`) → popis v UI
 CHECK_LABELS = {
@@ -219,10 +231,81 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
+    # --- lokálne AI (P0-24) -------------------------------------------------------------------------
+
+    def _ai_config() -> AiConfig:
+        client = app.state.ai_client
+        model = client.model if isinstance(client, OllamaClient) else settings.ollama_model
+        # zaseknutý pending = viac ako 2 × timeout (ARCHITECTURE §10.6)
+        return AiConfig(
+            model=model, lang=settings.ai_lang, stale_after=timedelta(seconds=2 * settings.ai_timeout_s)
+        )
+
+    def _ai_state(session: Session, job: AiJob, background: BackgroundTasks) -> AiState:
+        """Stav AI výstupu; pri chýbajúcom výstupe naplánuje generovanie na pozadí (vlastná session)."""
+        generator: Generator | None = app.state.ai_client
+        config = _ai_config()
+        state = lookup(session, job, config=config, now=_utc_now(), ai_enabled=generator is not None)
+        session.commit()
+        if state.status == "start":
+            background.add_task(
+                run_job, app.state.session_factory, job, generator, config=config, now=_utc_now
+            )
+        return state
+
+    def _ai_block(request: Request, url: str, kind: str, state: AiState) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request, "_ai_block.html", {"url": url, "kind": kind, "state": state}
+        )
+
+    @app.get("/ai/shift_summary/{shift_id}", response_class=HTMLResponse)
+    def ai_shift_summary(
+        request: Request, session: SessionDep, background: BackgroundTasks, shift_id: str
+    ) -> HTMLResponse:
+        try:
+            job = shift_summary_job(
+                session, shift_id, catalog=request_catalog(), config=_ai_config(), now=_utc_now()
+            )
+        except AnalyticsShiftNotFound:
+            raise HTTPException(status_code=404, detail="Shift not found") from None
+        state = _ai_state(session, job, background)
+        return _ai_block(request, f"/ai/shift_summary/{quote(shift_id, safe='')}", "shift_summary", state)
+
+    @app.get("/ai/link_explanation/{month}/{cause}/{effect}", response_class=HTMLResponse)
+    def ai_link_explanation(
+        request: Request,
+        session: SessionDep,
+        background: BackgroundTasks,
+        month: str,
+        cause: str,
+        effect: str,
+    ) -> HTMLResponse:
+        try:
+            start, end = parse_month(month)
+        except PeriodError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        job = link_job(
+            session,
+            start=start,
+            end=end,
+            period_key=month,
+            cause=cause,
+            effect=effect,
+            line=settings.line_id,
+            catalog=request_catalog(),
+            config=_ai_config(),
+            now=_utc_now(),
+        )
+        if job is None:
+            raise HTTPException(status_code=404, detail="Not a problem link in this period")
+        state = _ai_state(session, job, background)
+        url = f"/ai/link_explanation/{month}/{quote(cause, safe='')}/{quote(effect, safe='')}"
+        return _ai_block(request, url, "link_explanation", state)
+
     @app.get("/health")
     def health(request: Request) -> dict[str, object]:
         """Stav aplikácie a lokálneho AI — nikdy nezlyhá, ak Ollama nebeží (ARCHITECTURE §7)."""
-        client: OllamaClient | None = request.app.state.ai_client
+        client = request.app.state.ai_client
         if client is None:
             ai: dict[str, object] = {
                 "enabled": False,
@@ -230,6 +313,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "model": settings.ollama_model,
                 "model_present": False,
                 "message": "AI is disabled (OEE_AI_ENABLED=false)",
+            }
+        elif not isinstance(client, OllamaClient):  # testovací generátor (FakeGenerator)
+            ai = {
+                "enabled": True,
+                "available": True,
+                "model": type(client).__name__,
+                "model_present": True,
+                "message": f"custom generator {type(client).__name__}",
             }
         else:
             h = client.health()
@@ -353,7 +444,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/report/{shift_id}/hour/{hour_no}", response_class=HTMLResponse, response_model=None)
     async def save_report_hour(
-        request: Request, session: SessionDep, shift_id: str, hour_no: int
+        request: Request, session: SessionDep, background: BackgroundTasks, shift_id: str, hour_no: int
     ) -> HTMLResponse | RedirectResponse:
         overview = _overview(session, shift_id)
         tile = next((t for t in overview.tiles if t.hour_no == hour_no), None)
@@ -376,6 +467,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 form.errors.append("The form is out of date — reload the hour and enter the change again.")
             else:
                 if result.saved:
+                    if result.shift_status == "completed":  # ARCHITECTURE §6: AI zhrnutie po dokončení zmeny
+                        try:
+                            job = shift_summary_job(
+                                session,
+                                shift_id,
+                                catalog=request_catalog(),
+                                config=_ai_config(),
+                                now=_utc_now(),
+                            )
+                            _ai_state(session, job, background)
+                        except Exception:  # AI nesmie zhodiť uloženie hodiny; dashboard ho dogeneruje
+                            session.rollback()
+                            logger.exception("AI summary could not be scheduled for %s", shift_id)
                     target = f"/report/{shift_id}?saved={hour_no}"
                     if request.headers.get("HX-Request"):
                         return HTMLResponse("", headers={"HX-Redirect": target})
@@ -426,9 +530,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def shift_dashboard(
         request: Request, session: SessionDep, id: str | None = None
     ) -> HTMLResponse | RedirectResponse:
+        shifts = _shift_choices(session)
+        if not id and shifts:  # bez výberu sa otvorí posledná zmena (zoznam je zoradený od najnovšej)
+            id = shifts[0].shift_id
         if id:
             return RedirectResponse(f"/shift/{quote(id, safe='')}", status_code=303)
-        return _page(request, "shift.html", "Shift Dashboard", shifts=_shift_choices(session), a=None)
+        return _page(request, "shift.html", "Shift Dashboard", shifts=shifts, a=None)
 
     @app.get("/shift/{shift_id}", response_class=HTMLResponse)
     def shift_detail(
@@ -575,8 +682,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except PeriodError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
 
+    def _code_names(session: Session) -> dict[str, str]:
+        rows = [
+            *session.execute(select(IssueType.code, IssueType.name_en)),
+            *session.execute(select(DefectType.code, DefectType.name_en)),
+        ]
+        return {code: name for code, name in rows}
+
     def _analysis_page(
-        request: Request, session: Session, tab: str, week: str | None, month: str | None
+        request: Request,
+        session: Session,
+        tab: str,
+        week: str | None,
+        month: str | None,
+        cause: str | None = None,
+        effect: str | None = None,
     ) -> HTMLResponse:
         kind, key, start, end = _analysis_period(session, week, month)
         period = build_period(
@@ -589,6 +709,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             now=_utc_now(),
         )
         previous, following = neighbour_periods(kind, start, end)
+        extra: dict[str, object] = {}
+        if tab == "links":
+            matrix = link_matrix(period.problem_links, cause, effect)
+            extra = {
+                "matrix": matrix,
+                "occurrences": [] if matrix.selected is None else link_occurrences(session, matrix.selected),
+                "code_names": _code_names(session),
+            }
         return _page(
             request,
             "history_analysis.html",
@@ -605,6 +733,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             following=following,
             ranking=ranking_view(period),
             arrows=TREND_ARROWS,
+            **extra,
         )
 
     @app.get("/history/ranking", response_class=HTMLResponse)
@@ -615,9 +744,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/history/links", response_class=HTMLResponse)
     def history_links(
-        request: Request, session: SessionDep, week: str | None = None, month: str | None = None
+        request: Request,
+        session: SessionDep,
+        week: str | None = None,
+        month: str | None = None,
+        cause: str | None = None,
+        effect: str | None = None,
     ) -> HTMLResponse:
-        return _analysis_page(request, session, "links", week, month)
+        return _analysis_page(request, session, "links", week, month, cause, effect)
 
     def _preview(form: ModelForm) -> dict[str, object]:
         plan = None if form.config is None else build_shift_plan(form.config, datetime.now().date())

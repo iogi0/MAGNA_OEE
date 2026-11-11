@@ -187,3 +187,9 @@ def test_link_explanation_st038_q030(dataset_db: Session) -> None:
     )  # D1
     assert validate_payload(text, facts, allowed_codes=CODES, lang="en").ok
     assert validate_payload(link_explanation(facts, "sk"), facts, allowed_codes=CODES, lang="sk").ok
+
+
+@pytest.mark.golden
+@pytest.mark.parametrize("lang", ["en", "sk"])
+def test_fallback_summary_has_no_double_full_stop(s25: ShiftAnalytics, lang: str) -> None:
+    assert ".." not in shift_summary_text(shift_summary_facts(s25), lang)

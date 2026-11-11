@@ -199,3 +199,12 @@ def test_period_navigation_previous_and_next(empty: TestClient) -> None:
     month = empty.get("/history/month", params={"month": "2026-01"}).text
     assert 'href="/history/month?month=2025-12"' in month and 'href="/history/month?month=2026-02"' in month
     assert re.search(r'<input[^>]*name="month"[^>]*value="2026-01"', month)
+
+
+@pytest.mark.golden
+def test_critical_problems_share_excludes_unattributed_speed_loss(month_page: str) -> None:
+    # PLANNING D18: podiel medzi stratami z hlásených problémov (bez S), TASK §12.1: 1107 − 579 = 528 ks
+    block = month_page.split("Top-10 critical problems", 1)[1].split("</table>", 1)[0]
+    t = text(block)
+    assert "Share of problem losses" in t and "Unattributed" not in t
+    assert re.search(r"1 A ST-038 Camera light module interrupted operation 100 18\.9 %", t)

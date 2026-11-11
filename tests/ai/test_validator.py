@@ -121,3 +121,31 @@ def test_validator_checks_nested_strings_of_a_json_payload() -> None:
     assert validate_payload(payload, facts, allowed_codes=ALLOWED, lang="en").ok
     bad = {**payload, "impact": "150 pcs"}
     assert not validate_payload(bad, facts, allowed_codes=ALLOWED, lang="en").ok
+
+
+# --- regresie z revízie P0-23 ---------------------------------------------------------------------
+
+
+def test_en_two_decimals_at_sentence_end_is_a_number_not_a_date() -> None:
+    facts = {"rate_in_window_pct": 10.53}
+    assert validate_text("The rate in the window was 10.53.", facts, allowed_codes=ALLOWED, lang="en").ok
+
+
+def test_time_must_match_exactly_not_as_substring() -> None:
+    facts = {"start": "11:00"}
+    result = validate_text("It started at 1:00.", facts, allowed_codes=ALLOWED, lang="en")
+    assert not result.ok and any("1:00" in p for p in result.problems)
+    assert validate_text("It started at 11:00.", facts, allowed_codes=ALLOWED, lang="en").ok
+    assert validate_text("Start 9:08.", {"start": "09:08"}, allowed_codes=ALLOWED, lang="en").ok
+
+
+def test_sk_adjacent_numbers_are_not_merged_into_thousands() -> None:
+    facts = {"support": 3, "produced_in_window": 120}
+    assert validate_text("Po 3 120 kusoch.", facts, allowed_codes=ALLOWED, lang="sk").ok  # 3 a 120
+    assert validate_text("Target 9 240 ks.", {"t": 9240}, allowed_codes=ALLOWED, lang="sk").ok
+    assert not validate_text("Target 9 250 ks.", {"t": 9240}, allowed_codes=ALLOWED, lang="sk").ok
+
+
+def test_sk_short_date_still_checked() -> None:
+    assert validate_text("Zmena 25.11. bola slabá.", FACTS, allowed_codes=ALLOWED, lang="sk").ok
+    assert not validate_text("Zmena 26.11. bola slabá.", FACTS, allowed_codes=ALLOWED, lang="sk").ok

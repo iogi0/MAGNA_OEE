@@ -35,6 +35,13 @@
 </article>
 {% if h.provisional %}<p><small>Provisional: the shift is not complete yet; numbers cover submitted hours only.</small></p>{% endif %}
 
+<section id="f">
+  <h2>F · Shift summary</h2>
+  <div hx-get="/ai/shift_summary/{{ h.shift_id | urlencode }}" hx-trigger="load" hx-swap="outerHTML" class="ai-block">
+    <small aria-busy="true">Loading summary…</small>
+  </div>
+</section>
+
 <section id="a">
   <h2>A · Overall result</h2>
   <div class="kpi-cards">
@@ -155,6 +162,9 @@
     {% endfor %}
     </tbody>
   </table>
+  <p><small><em>Unattributed speed loss</em> = pieces the line could have made in its run time (planned time minus
+  reported stops) but did not, with no problem reported for them: micro-stops, slow cycles, retests.
+  Report a stop as a problem and its pieces move from here to that problem.</small></p>
 </section>
 {% endif %}
 {% endblock %}

@@ -70,6 +70,8 @@ def test_shift_page_without_shifts_points_to_reporting(empty: TestClient) -> Non
 
 @pytest.mark.golden
 def test_shift_selector_lists_shifts_and_opens_latest(imported: TestClient) -> None:
+    r = imported.get("/shift", follow_redirects=False)  # bez výberu → posledná zmena, nie prázdna stránka
+    assert r.status_code == 303 and r.headers["location"] == "/shift/L01-20261130-M"
     html = imported.get("/shift").text
     assert html.count('<option value="L01-2026') == 21
     r = imported.get("/shift", params={"id": S25}, follow_redirects=False)

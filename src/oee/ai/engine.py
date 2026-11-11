@@ -25,6 +25,8 @@ class TaskResult:
     source: Source
     attempts: int
     problems: list[str] = field(default_factory=list)
+    unavailable: bool = False
+    """Fallback pre nedostupnú / pomalú Ollama (nie pre zlý text) — oplatí sa neskôr skúsiť znova."""
 
 
 def _shape_problems(payload: dict[str, Any], schema: dict[str, Any]) -> list[str]:
@@ -68,7 +70,7 @@ def run_task(
             seen += problems
             continue
         except (AiTimeout, AiUnavailable) as exc:  # druhý pokus by len predĺžil čakanie
-            return TaskResult(fallback(), "template", attempts, [*seen, str(exc)])
+            return TaskResult(fallback(), "template", attempts, [*seen, str(exc)], unavailable=True)
         problems = _shape_problems(payload, prompt.schema)
         if not problems:
             problems = validate_payload(

@@ -149,13 +149,11 @@
   <h2>Main losses{% if tab == "month" %} · Top-{{ ranking | length }} critical problems{% endif %}</h2>
   <div class="overflow-auto">
   <table class="striped compact">
-    <thead><tr><th>#</th><th>Class</th><th>Code</th><th>Name</th><th>Lost pcs</th><th>Share of all losses</th><th>Trend</th></tr></thead>
+    <thead><tr><th>#</th><th>Class</th><th>Code</th><th>Name</th><th>Lost pcs</th><th title="Share of losses from recorded problems (without unattributed speed loss)">Share of problem losses</th><th>Trend</th></tr></thead>
     <tbody>
-      <tr class="pinned"><td></td><td></td><td colspan="2"><em>Unattributed speed loss</em></td><td>{{ p.unattributed_speed_loss.pcs | num }}</td>
-        <td>{{ p.unattributed_speed_loss.share_of_all_losses | pct if p.unattributed_speed_loss.share_of_all_losses is not none else "—" }}</td><td></td></tr>
       {% for r in ranking %}
       <tr><td>{{ r.rank }}</td><td>{{ r.class_ }}</td><td>{{ r.code }}</td><td>{{ r.name }}</td><td>{{ r.lost_pcs | num }}</td>
-        <td>{{ r.share_of_all_losses | pct if r.share_of_all_losses is not none else "—" }}</td><td>{{ r.trend }}</td></tr>
+        <td>{{ r.share_of_recorded | pct if r.share_of_recorded is not none else "—" }}</td><td>{{ r.trend }}</td></tr>
       {% endfor %}
     </tbody>
   </table>

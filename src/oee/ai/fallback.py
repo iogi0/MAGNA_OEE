@@ -61,7 +61,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "no_oee": "OEE zatiaľ nie je k dispozícii",
         "output": " Linka vyrobila {produced} z {target} kusov targetu ({pvt} %), z toho {good} dobrých.",
         "shortfall": (
-            " Nedobór {shortfall} ks: technické problémy {down_pcs} ks ({down_min} min v {events}"
+            " Manko {shortfall} ks: technické problémy {down_pcs} ks ({down_min} min v {events}"
             " {event_word}),"
             " straty rýchlosti {speed} ks, zmätky {rejects} ks ({reject_rate} %)."
         ),
@@ -132,7 +132,7 @@ def shift_summary_text(facts: dict[str, Any], lang: Lang) -> str:
             weekday=weekday,
             date=_day(facts["date"]),
             oee=oee,
-            goal_part=goal_part,
+            goal_part=goal_part.rstrip("."),  # „p.p." už končí bodkou
         )
     )
     pvt = facts["production_vs_target_pct"]

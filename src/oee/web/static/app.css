@@ -87,3 +87,10 @@ nav.tabs { justify-content: flex-start; }
 .flag.linked { text-decoration: none; border-color: var(--pico-primary); color: var(--pico-primary); }
 .conf-high { border-color: var(--pico-ins-color); }
 .conf-medium { border-color: #c9a227; }
+.ai-block { padding: .75rem 1rem; border-left: .25rem solid var(--pico-primary); background: var(--pico-card-background-color); border-radius: .4rem; margin-bottom: .75rem; }
+.ai-block p { margin-bottom: .4rem; }
+.ai-source { color: var(--pico-muted-color); }
+.ai-link { display: grid; grid-template-columns: max-content 1fr; gap: .2rem .9rem; margin: 0 0 .4rem; }
+.ai-link dt { font-weight: 600; }
+.ai-link dd { margin: 0; }
+tr.explanation td { padding-top: 0; }

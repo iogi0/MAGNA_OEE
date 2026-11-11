@@ -24,6 +24,11 @@ CODE = re.compile(r"\b(?:ST|Q)-\d{3}\b")
 TIME = re.compile(r"\b\d{1,2}:\d{2}\b")
 ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 DOT_DATE = re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b|\b(\d{2})\.(\d{2})\.(?!\d)")
+# krátky tvar „25.11." iba v slovenčine — v angličtine je „10.53." číslo na konci vety
+DATE_PATTERN = {
+    "en": re.compile(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b"),
+    "sk": DOT_DATE,
+}
 MINUS = "-−"
 NUMBER = {
     "en": re.compile(
@@ -66,8 +71,8 @@ def _mask(text: str, pattern: re.Pattern[str]) -> str:
     return pattern.sub(lambda m: " " * len(m.group(0)), text)
 
 
-def _strip_special(text: str) -> str:
-    for pattern in (SHIFT_ID, CODE, TIME, ISO_DATE, DOT_DATE):
+def _strip_special(text: str, lang: Lang = "sk") -> str:
+    for pattern in (SHIFT_ID, CODE, TIME, ISO_DATE, DATE_PATTERN[lang]):
         text = _mask(text, pattern)
     return text
 
@@ -87,7 +92,7 @@ def _parse(raw: str, lang: Lang) -> FoundNumber:
 
 def extract_numbers(text: str, lang: Lang) -> list[FoundNumber]:
     """Čísla v texte bez časov, dátumov, kódov a ID zmeny."""
-    return [_parse(m.group(0), lang) for m in NUMBER[lang].finditer(_strip_special(text))]
+    return [_parse(m.group(0), lang) for m in NUMBER[lang].finditer(_strip_special(text, lang))]
 
 
 # --- fakty ----------------------------------------------------------------------------------------
@@ -120,6 +125,12 @@ def _fact_dates(strings: set[str]) -> set[tuple[int, int, int]]:
     return dates
 
 
+def _parts_match(number: FoundNumber, lang: Lang, facts: list[float]) -> bool:
+    """sk „3 120" môžu byť dve čísla (3 a 120), nielen tisíce — prijme sa, ak sedia všetky časti."""
+    parts = re.split(r"[   ]", number.raw)
+    return len(parts) > 1 and all(_matches(_parse(part, lang), facts) for part in parts if part)
+
+
 def _matches(number: FoundNumber, facts: list[float]) -> bool:
     tolerance = 0.5 * 10 ** (-number.decimals) + EPS
     return any(abs(abs(number.value) - abs(f)) <= tolerance for f in facts)
@@ -142,16 +153,18 @@ def validate_text(
     for shift_id in SHIFT_ID.findall(text):
         if shift_id not in joined:
             result.problems.append(f"shift id {shift_id} is not in the facts")
+    fact_times = {(int(h), int(m)) for h, m in (t.split(":") for t in TIME.findall(joined))}
     for time_ in TIME.findall(text):
-        if time_ not in joined and f"0{time_}" not in joined:
+        hours, minutes = time_.split(":")
+        if (int(hours), int(minutes)) not in fact_times:
             result.problems.append(f"time {time_} is not in the facts")
 
     dates = _fact_dates(strings)
     for m in ISO_DATE.finditer(text):
         if (int(m.group(1)), int(m.group(2)), int(m.group(3))) not in dates:
             result.problems.append(f"date {m.group(0)} is not in the facts")
-    for m in DOT_DATE.finditer(text):
-        if m.group(3):
+    for m in DATE_PATTERN[lang].finditer(text):
+        if m.group(3):  # plný dátum (v oboch jazykoch); krátky „25.11." iba sk
             key = (int(m.group(3)), int(m.group(2)), int(m.group(1)))
             found = key in dates
         else:
@@ -159,11 +172,11 @@ def validate_text(
         if not found:
             result.problems.append(f"date {m.group(0)} is not in the facts")
 
-    for m in WRONG_DECIMAL[lang].finditer(_strip_special(text)):
+    for m in WRONG_DECIMAL[lang].finditer(_strip_special(text, lang)):
         result.problems.append(f"number {m.group(0)} uses the wrong decimal separator for '{lang}'")
     numbers = _fact_numbers(facts)
     for number in extract_numbers(text, lang):
-        if not _matches(number, numbers):
+        if not (_matches(number, numbers) or _parts_match(number, lang, numbers)):
             result.problems.append(f"number {number.raw.strip()} is not in the facts")
     return result
 

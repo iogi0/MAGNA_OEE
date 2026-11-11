@@ -70,12 +70,12 @@ def test_ranking_order_and_classes(ranking: str) -> None:
 
 
 @pytest.mark.golden
-def test_pinned_unattributed_speed_loss_row(ranking: str) -> None:
-    pinned = ranking.split('class="pinned"', 1)[1].split("</tr>", 1)[0]
-    t = text(pinned)
-    assert "Unattributed speed loss" in t and "579" in t and "52.3 %" in t  # TASK §12.1
-    assert ranking.index('class="pinned"') < ranking.index('data-rank="1"')  # nad rebríčkom
-    assert "/history/month?month=2026-11" in pinned  # odkaz na analýzu hodín zmeny
+def test_unattributed_speed_loss_is_not_in_ranking(ranking: str) -> None:
+    # rozhodnutie vlastníka (PLANNING D18): nepriradená strata rýchlosti → bez riadku v rebríčku
+    assert 'class="pinned"' not in ranking
+    table = ranking.split("<table", 1)[1].split("</table>", 1)[0]
+    assert "Unattributed speed loss" not in table
+    assert "/history/month?month=2026-11#speed-by-hour" in ranking  # odkaz na analýzu hodín zmeny
 
 
 @pytest.mark.golden
