@@ -1,0 +1,35 @@
+# Testovacie prípady z prezentácie (TASK.md §12.7). Takt 60 s/ks (príklad z prezentácie, PLANNING D8).
+# Percentá sú zaokrúhlené na 0,1 (tak ako na slajdoch); goal_gap_pp voči cieľu OEE 85 %.
+- name: slide_11_shift
+  ideal_cycle_s: 60
+  planned_min: 440
+  downtime_min: 45
+  produced: 353
+  rejects: 4
+  target_oee: 0.85
+  expected:
+    target: 440
+    run_min: 395
+    good: 349
+    availability_pct: 89.8
+    performance_pct: 89.4
+    quality_pct: 98.9
+    oee_pct: 79.3
+    goal_gap_pp: -5.7
+
+- name: slide_12_week
+  ideal_cycle_s: 60
+  planned_min: 2200
+  downtime_min: 90
+  produced: 1992
+  rejects: 18
+  target_oee: 0.85
+  expected:
+    target: 2200
+    run_min: 2110
+    good: 1974
+    availability_pct: 95.9
+    performance_pct: 94.4
+    quality_pct: 99.1
+    oee_pct: 89.7
+    goal_gap_pp: 4.7

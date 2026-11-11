@@ -1,0 +1,22 @@
+{
+  "hour_id": "L01-20261125-04",
+  "shift_id": "L01-20261125-M",
+  "date": "2026-11-25",
+  "hour_no": 4,
+  "produced": 31,
+  "rejects": 0,
+  "rejects_by_defect": [],
+  "issues": [
+    {
+      "issue_id": null,
+      "client_key": "7f3c2a10-5b1e-4c7a-9a77-2f0d6c1e8b42",
+      "issue_type_code": "ST-038",
+      "duration_min": 25,
+      "start_time": "09:08",
+      "continues_issue_id": null,
+      "comment": null
+    }
+  ],
+  "retests": null,
+  "submitted_by": "J.N."
+}

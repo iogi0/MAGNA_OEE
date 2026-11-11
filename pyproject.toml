@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oee"
+version = "0.1.0"
+description = "AI OEE Improvement Engine — Magna Hackathon (MVP): hodinové hlásenia, analytika zmeny, história výroby, lokálne AI (Qwen 3B cez Ollama)."
+readme = "README.md"
+requires-python = ">=3.12"
+# Horné hranice = ďalšia hlavná verzia (ochrana pred nekompatibilnými zmenami).
+# Presné overené verzie sa zapíšu do constraints.txt v úlohe P0-01 (overené 10.11.2026 na Python 3.14:
+# fastapi 0.162, starlette 1.10, uvicorn 0.54, sqlalchemy 2.1, pydantic 2.14, httpx 0.28, openpyxl 3.1.5).
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "jinja2>=3.1,<4",
+    "python-multipart>=0.0.18,<1",
+    "sqlalchemy>=2.0,<3",
+    "pydantic>=2.7,<3",
+    "pydantic-settings>=2.3,<3",
+    "httpx>=0.27,<1",
+    "openpyxl>=3.1,<4",
+    "pyyaml>=6.0,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2,<10",
+    "pytest-cov>=5.0,<8",
+    "ruff>=0.5,<1",
+    "mypy>=1.10,<3",
+    "types-PyYAML",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+oee = ["catalog/*.yaml", "ai/prompts/*.md", "web/templates/**/*", "web/static/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+# Testy s reálnym Ollama sú predvolene vypnuté; `pytest -m ollama` ich spustí (posledné -m vyhráva).
+addopts = "-ra -m \"not ollama\""
+markers = [
+    "golden: porovnanie s referenčnými hodnotami z TASK.md §12 (vyžaduje data/raw/dummy_data.xlsx)",
+    "ollama: vyžaduje bežiaci lokálny Ollama s modelom qwen2.5:3b (spúšťa sa len na testovacom notebooku)",
+]
+# Starlette 1.x varuje pri TestClient nad httpx; je to iba deprecation, nie chyba.
+filterwarnings = [
+    "ignore:Using .httpx. with .starlette.testclient. is deprecated",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# PLW1514 (open() bez encoding) je preview pravidlo: na Windows je predvolené kódovanie cp1251,
+# preto každé čítanie/zápis textu musí mať encoding="utf-8". Ostatné preview pravidlá ostávajú vypnuté.
+preview = true
+explicit-preview-rules = true
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "PLW1514"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+packages = ["oee"]
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+# Prísny režim pre domain a contracts. `strict` je iba globálny prepínač mypy,
+# preto sú tu vymenované jeho per-module ekvivalenty.
+[[tool.mypy.overrides]]
+module = ["oee.domain.*", "oee.contracts.*"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_calls = true
+disallow_any_generics = true
+check_untyped_defs = true
+warn_return_any = true
+no_implicit_reexport = true
+strict_equality = true

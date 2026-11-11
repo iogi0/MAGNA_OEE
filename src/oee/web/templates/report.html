@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+{% if model is none %}
+<article class="notice">
+  <p><strong>No active shift model.</strong> Set the line rate and planned time in Settings first.</p>
+  <a href="/settings" role="button">Go to Settings</a>
+</article>
+{% else %}
+<article>
+  <p>Shift {{ line }} · {{ today.isoformat() }} · start {{ model.config.start.strftime("%H:%M") }},
+     {{ hours }} h, {{ model.config.rate_per_hour | num }} pcs/h.</p>
+  <p><small>Hourly entry form arrives in P0-17.</small></p>
+</article>
+{% endif %}
+{% endblock %}

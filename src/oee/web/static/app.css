@@ -1,0 +1,13 @@
+/* Malé úpravy nad Pico.css (žiadne externé zdroje). */
+.notice { border-left: .25rem solid var(--pico-primary); }
+.notice.error { border-left-color: var(--pico-del-color); }
+.kpis { display: flex; flex-wrap: wrap; gap: 1rem 2rem; }
+.kpis dt { font-size: .85em; color: var(--pico-muted-color); }
+.kpis dd { margin: 0; font-size: 1.25em; font-weight: 600; }
+label.inline { display: inline-block; margin-right: 1rem; }
+div.codes { max-height: 28rem; overflow-y: auto; }
+tr.added td { background: var(--pico-ins-color); color: #fff; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.actions button { width: auto; margin: 0; }
+.actions .small { margin: 0; padding: .35rem .75rem; font-size: .85em; }
+.add-code button { width: auto; }

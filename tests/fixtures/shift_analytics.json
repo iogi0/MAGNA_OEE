@@ -1,0 +1,41 @@
+{
+  "shift": { "shift_id": "L01-20261125-M", "date": "2026-11-25", "weekday": "Wed", "line": "L01", "product": "P01",
+             "status": "completed", "provisional": false, "hours_submitted": 8, "hours_total": 8, "revision": 1,
+             "computed_at": "2026-11-25T14:05:00" },
+  "model": { "calendar_min": 480, "planned_min": 440, "ideal_cycle_s": 60, "target_oee": 0.85 },
+  "kpi": { "availability": 0.8909, "performance": 0.8929, "quality": 0.9829, "oee": 0.7818,
+           "oee_gap_pp": -6.82, "oee_status": "below_goal", "first_pass_quality": null },
+  "target_vs_actual": { "target_pcs": 440, "produced_pcs": 350, "rejects_pcs": 6, "good_pcs": 344,
+                        "production_vs_target": 0.795, "good_vs_target": 0.782,
+                        "deviation_from_target_pcs": -96, "oee_goal_pcs": 374 },
+  "waterfall_pcs": { "target": 440, "technical_losses": 48, "speed_loss": 42, "quality_loss": 6, "good": 344 },
+  "technical_losses": { "total_min": 48, "events": 3, "share_of_target": 0.109,
+                        "by_category": [ { "category": "Camera malfunction", "min": 25, "events": 1 },
+                                         { "category": "Leak test issue", "min": 23, "events": 2 } ] },
+  "speed_loss": { "pcs": 42, "decomposition_s": null },
+  "quality": { "rejects": 6, "reject_rate": 0.0171,
+               "by_defect": [ { "code": "Q-030", "qty": 3 }, { "code": "Q-020", "qty": 2 }, { "code": "Q-031", "qty": 1 } ],
+               "by_hour": [0, 1, 1, 0, 1, 2, 1, 0] },
+  "hourly": [
+    { "hour_no": 1, "slot": "06:00-07:00", "planned_min": 50, "target_pcs": 50,
+      "produced": 42, "rejects": 0, "downtime_min": 0, "speed_loss_pcs": 8,
+      "availability": 1.0, "performance": 0.84, "quality": 1.0, "oee": 0.84, "flags": ["below_goal"] }
+  ],
+  "issues": [
+    { "issue_id": "0b6f3c1e-1d2a-4b5c-8e9f-a1b2c3d4e5f6", "hour_no": 2, "start_time": "07:08",
+      "category": "Leak test issue", "issue_type": "ST-046", "name": "Leak measurement unit interrupted test",
+      "duration_min": 13, "lost_pcs": 13, "share_of_target": 0.0295, "flags": ["over_5_min"] }
+  ],
+  "loss_pareto": [
+    { "bucket": "unattributed_speed_loss", "pcs": 42, "share_of_losses": 0.4375 },
+    { "bucket": "ST-038", "kind": "downtime", "pcs": 25, "share_of_losses": 0.2604 },
+    { "bucket": "ST-046", "kind": "downtime", "pcs": 23, "share_of_losses": 0.2396 },
+    { "bucket": "Q-030", "kind": "quality", "pcs": 3 }, { "bucket": "Q-020", "kind": "quality", "pcs": 2 },
+    { "bucket": "Q-031", "kind": "quality", "pcs": 1 }
+  ],
+  "summary": { "facts": { "oee": 0.7818, "top_problem": "ST-038" }, "text": "Shift 25.11. ended below the OEE goal.",
+               "text_source": "template" },
+  "ai_recommendations": [],
+  "alerts": [],
+  "data_quality": []
+}

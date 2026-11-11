@@ -1,0 +1,19 @@
+# Páry „prestoj → zmätok" tej istej stanice / procesu (TASK §5.4, §8.6) → link_type = same_process.
+# Prestoj patrí do procesu podľa svojej (efektívnej) kategórie; ostatné páry sú cross_process.
+# Je to nastavenie (predpoklad z ilustrácie linky, TASK §2), nie dokázaný fakt.
+processes:
+  - name: Camera
+    stop_categories: [camera]
+    defects: [Q-030]
+  - name: Leak test
+    stop_categories: [leak_test]
+    defects: [Q-031, Q-032]
+  - name: Screwdriving
+    stop_categories: [screwdriving]
+    defects: [Q-025, Q-026, Q-027]
+  - name: Pressing
+    stop_categories: [pressing]
+    defects: [Q-020, Q-021, Q-022]
+  - name: Robot
+    stop_categories: [robot]
+    defects: [Q-003]

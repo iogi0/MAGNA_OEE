@@ -1,0 +1,34 @@
+{
+  "period": { "type": "month", "from": "2026-11-01", "to": "2026-11-30", "line": "L01",
+              "shifts_completed": 21, "shifts_excluded_incomplete": 0 },
+  "kpi": { "availability": 0.9556, "performance": 0.9344, "quality": 0.9856, "oee": 0.8801,
+           "oee_gap_pp": 3.01, "first_pass_quality": 0.9667 },
+  "totals": { "planned_min": 9240, "target_pcs": 9240, "oee_goal_pcs": 7854,
+              "downtime_min": 410, "downtime_events": 33, "produced": 8251, "rejects": 119, "good": 8132,
+              "speed_loss_pcs": 579, "production_vs_target": 0.893, "deviation_from_target_pcs": -1108 },
+  "waterfall_pcs": { "target": 9240, "technical_losses": 410, "speed_loss": 579, "quality_loss": 119, "good": 8132 },
+  "shift_series": [ { "shift_id": "L01-20261102-M", "date": "2026-11-02", "oee": 0.8727, "status": "goal_met" } ],
+  "weekly": [ { "iso_week": 45, "from": "2026-11-02", "to": "2026-11-06", "shifts": 5, "partial": false,
+                "oee": 0.8768, "availability": 0.9491, "performance": 0.9387, "quality": 0.9842 } ],
+  "issue_stats": [ { "code": "ST-038", "category": "Camera malfunction", "events": 4, "total_min": 100,
+                     "avg_min": 25, "lost_pcs": 100 } ],
+  "defect_stats": [ { "code": "Q-031", "records": 35, "qty": 38 } ],
+  "unattributed_speed_loss": { "pcs": 579, "share_of_all_losses": 0.523,
+                               "by_hour_of_shift": [ { "hour_no": 1, "pcs": 115, "performance": 0.885 } ] },
+  "problem_ranking": [
+    { "rank": 1, "class": "A", "kind": "downtime", "code": "ST-038", "name": "Camera light module interrupted operation",
+      "category": "Camera malfunction", "events": 4, "total_min": 100, "avg_min": 25, "lost_pcs": 100,
+      "share_of_recorded": 0.189, "share_of_all_losses": 0.090, "kpi_impact": { "kpi": "availability", "pp": 1.08 },
+      "trend": "stable", "trend_change": 0.0, "recurring": true, "last_occurrence": "2026-11-25",
+      "evidence": ["0b6f3c1e-1d2a-4b5c-8e9f-a1b2c3d4e5f6"] }
+  ],
+  "patterns": [],
+  "problem_links": [
+    { "cause": "ST-038", "effect": "Q-030", "window": "same_hour+next_hour", "support": 4,
+      "q_in_window": 3, "produced_in_window": 228, "rate_in_window": 0.0132, "base_rate": 0.0027,
+      "lift": 4.8, "extra_rejects": 2.4, "link_type": "same_process", "process": "Camera", "confidence": "low",
+      "combined_impact_pcs": 102.4, "explanation": "After 4 ST-038 events, 3 pcs Q-030 were found in the window.",
+      "explanation_source": "rule_template", "evidence": ["0b6f3c1e-1d2a-4b5c-8e9f-a1b2c3d4e5f6"] }
+  ],
+  "data_quality": []
+}

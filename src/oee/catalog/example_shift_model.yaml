@@ -1,0 +1,19 @@
+# PRÍKLAD modelu zmeny z prezentácie (TASK §3.1–3.2) — NIE predvolený stav aplikácie (PLANNING D8).
+# Používa ho iba tlačidlo „Fill with example" v Settings, demo a testy. Skutočné hodnoty zadáva manažér.
+#   planned = 480 − 30 − 10 = 440 min;  target = 60 × 440 / 60 = 440 ks
+rate_per_hour: 60          # výkon linky, ks/h  (ideal cycle = 3600 / 60 = 60 s)
+start: "06:00"             # začiatok zmeny (lokálny čas linky)
+duration_min: 480          # dĺžka zmeny = 8 hodinových slotov
+break:
+  minutes: 30
+  hour_no: 5               # 10:00–10:30
+  offset_min: 0
+am:
+  minutes: 10
+  hour_no: 1               # 06:00–06:10
+  offset_min: 0
+target_oee: 0.85
+working_days: [0, 1, 2, 3, 4]   # 0 = pondelok … 4 = piatok
+# Mimo modelu výpočtu (Settings ich ukladajú s modelom zmeny):
+product: P01               # produkt datasetu
+grace_min: 60              # po konci zmeny + grace je neúplná zmena `incomplete` (TASK §4.3, predvolene 60 min)
