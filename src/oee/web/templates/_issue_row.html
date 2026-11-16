@@ -1,0 +1,31 @@
+{# Riadok problému — celý číselník ST + Other (D15). `row` = hodnoty formulára (prázdne pre nový riadok). #}
+<div class="row-card issue-row">
+  <input type="hidden" name="issue_id" value="{{ row.issue_id or '' }}">
+  <input type="hidden" name="issue_key" value="{{ row.issue_key or new_key() }}">
+  <div class="grid">
+    <label>Problem type
+      <select name="issue_code" required>
+        <option value="">— choose —</option>
+        {% for c in stops %}
+        <option value="{{ c.code }}"{% if row.issue_code == c.code %} selected{% endif %}>{{ c.code }} · {{ c.name_en }}</option>
+        {% endfor %}
+        <option value="{{ other_stop }}"{% if row.issue_code == other_stop %} selected{% endif %}>{{ other_stop }} · Other (comment required)</option>
+      </select></label>
+    <label>Duration (min)
+      <input name="issue_duration" type="number" min="0" step="any" value="{{ row.issue_duration or '' }}" required></label>
+    <label>Start (optional)
+      <input name="issue_start" type="time" value="{{ row.issue_start or '' }}"></label>
+  </div>
+  <div class="grid">
+    <label>Continues from previous hour
+      <select name="issue_continues">
+        <option value="">— no —</option>
+        {% for p in state.previous_issues %}
+        <option value="{{ p.issue_id }}"{% if row.issue_continues == p.issue_id %} selected{% endif %}>{{ p.code }} · {{ p.duration_min | num }} min{% if p.start %} from {{ p.start.strftime("%H:%M") }}{% endif %}</option>
+        {% endfor %}
+      </select></label>
+    <label>Comment
+      <input name="issue_comment" value="{{ row.issue_comment or '' }}" maxlength="500"></label>
+  </div>
+  <button type="button" class="secondary outline small" onclick="this.closest('.row-card').remove()">Remove</button>
+</div>

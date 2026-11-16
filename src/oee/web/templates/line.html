@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{# Line X-Ray: problémy po staniciach (mapovanie kategória → stanica = predpoklad, TASK §2). Iba počty a minúty záznamov. #}
+{% macro icon(kind) %}
+<svg viewBox="0 0 64 48" width="64" height="48" aria-hidden="true" class="st-icon">
+  <rect x="2" y="40" width="60" height="6" rx="2" class="belt"/>
+  {% if kind == "robot" %}
+  <rect x="10" y="30" width="22" height="10" rx="2"/><path d="M21 30 L21 18 L36 10 L46 16" class="arm"/><circle cx="21" cy="18" r="3"/><path d="M46 16 l6 4 -4 4" class="arm"/>
+  {% elif kind == "press" %}
+  <rect x="12" y="8" width="40" height="32" rx="2"/><rect x="26" y="14" width="12" height="14" class="cut"/><rect x="22" y="30" width="20" height="5" class="cut"/>
+  {% elif kind == "camera" %}
+  <rect x="14" y="18" width="36" height="22" rx="3"/><circle cx="32" cy="29" r="6" class="cut"/><circle cx="32" cy="29" r="3"/><rect x="34" y="8" width="12" height="8" rx="1"/><path d="M30 18 L30 8 L34 8" class="arm"/>
+  {% elif kind == "screw" %}
+  <rect x="10" y="28" width="44" height="12" rx="2"/><path d="M18 28 V10 H46 V28" class="arm"/><rect x="28" y="12" width="8" height="12" class="cut"/>
+  {% elif kind == "rotate" %}
+  <ellipse cx="32" cy="34" rx="22" ry="6"/><rect x="20" y="16" width="24" height="14" rx="2" transform="rotate(-12 32 23)"/><path d="M44 8 a14 14 0 0 1 10 10" class="arm"/><path d="M52 14 l2 4 -4 0" class="arm"/>
+  {% elif kind == "leak" %}
+  <rect x="12" y="12" width="40" height="28" rx="2"/><rect x="18" y="20" width="10" height="16" class="cut"/><rect x="36" y="20" width="10" height="16" class="cut"/><circle cx="46" cy="10" r="5" class="cut"/><path d="M46 7 v3 h2" class="arm"/>
+  {% else %}
+  <rect x="16" y="20" width="32" height="20" rx="2"/>
+  {% endif %}
+</svg>
+{% endmacro %}
+{% macro level_text(level) %}{{ {"none": "No issues", "low": "Low", "elevated": "Elevated", "high": "High"}[level] }}{% endmacro %}
+
+{% block content %}
+{% if not shifts %}
+<article class="notice"><p><strong>No shifts yet.</strong> Report hours in <a href="/report">Hourly Reporting</a>
+  or import the dataset on the <a href="/import">Import</a> page.</p></article>
+{% else %}
+<form method="get" action="/line" class="xray-picker">
+  <nav class="seg" aria-label="Perspective">
+    {% for v, title in [("shift", "Shift"), ("week", "Week"), ("month", "Month")] %}
+    <a href="/line?view={{ v }}"{% if view == v %} aria-current="true"{% endif %}>{{ title }}</a>
+    {% endfor %}
+  </nav>
+  <input type="hidden" name="view" value="{{ view }}">
+  <label>{{ {"shift": "Shift", "week": "Week", "month": "Month"}[view] }}
+    <select name="{{ view }}" onchange="this.form.submit()">
+      {% for k, text in options %}<option value="{{ k }}"{% if k == chosen %} selected{% endif %}>{{ text }}</option>{% endfor %}
+    </select></label>
+  <noscript><button type="submit">Show</button></noscript>
+</form>
+
+{% set x = xray %}
+<article class="xray">
+  <header class="xray-head">
+    <h2>Production line X-Ray</h2>
+    <small>{{ label }}
+      · {{ x.total_events }} downtime records / {{ x.total_minutes | num }} min</small>
+  </header>
+  <div class="conveyor">
+    {% for st in x.stations %}
+    <div class="station lvl-{{ st.level }}" data-station="{{ st.no }}" data-level="{{ st.level }}">
+      <div class="st-pin" title="{{ level_text(st.level) }}"></div>
+      {{ icon(st.kind) }}
+      <a class="st-card" href="#st-{{ st.no }}">
+        <span class="st-no">{{ "%02d" % st.no }}</span>
+        <span class="st-name">{{ st.name }}</span>
+        <strong class="st-level">{{ level_text(st.level) }}</strong>
+        {% if st.events %}<span class="st-meta">{{ st.events }} record{{ "s" if st.events != 1 }} · {{ st.minutes | num }} min</span>{% endif %}
+        {% if st.defects %}<span class="st-meta">{{ st.defects }} reject{{ "s" if st.defects != 1 }}</span>{% endif %}
+        {% if st.assumed_events %}<span class="st-assumed" title="The problem category belongs to more than one station">{{ st.assumed_events }} assumed</span>{% endif %}
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+  <footer class="xray-legend">
+    <span><i class="dot lvl-none"></i> no issues</span>
+    <span><i class="dot lvl-low"></i> 1 record</span>
+    <span><i class="dot lvl-elevated"></i> 2 records or ≥ 15 min</span>
+    <span><i class="dot lvl-high"></i> 3+ records or ≥ 25 min</span>
+    <p><small>The highest matching level applies (thresholds in <code>catalog/stations.yaml</code>). Which code belongs to which
+      station is a setting, not a fact from the data (TASK §2); a category used on several stations is counted on each and marked “assumed”.</small></p>
+  </footer>
+</article>
+
+{% if x.hours %}
+<article class="xray">
+  <header class="xray-head"><h2>Registered downtime by hour</h2><small>{{ x.total_events }} events / {{ x.total_minutes | num }} min</small></header>
+  <div class="hour-strip">
+    {% for h in x.hours %}
+    <div class="hour{% if not h.reported %} unreported{% endif %}" title="Hour {{ h.hour_no }} · {{ h.start.strftime('%H:%M') }}–{{ h.end.strftime('%H:%M') }}{% if not h.reported %} · not reported{% endif %}">
+      {% for g in h.segments %}<i style="left: {{ g.left }}%; width: {{ [g.width, 3] | max }}%" class="{{ '' if g.timed else 'untimed' }}"
+         title="{{ g.code }} · {{ g.start.strftime('%H:%M') if g.timed else 'time not recorded' }} · {{ g.minutes | num }} min"></i>{% endfor %}
+      <span>{{ h.start.strftime("%H:%M") }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <p><small>Red = recorded downtime interval (hover for code and minutes); hatched red = event without start time, drawn from the start of the hour.
+    Grey = no recorded stop; striped = hour not reported yet.</small></p>
+</article>
+{% endif %}
+
+<article class="xray">
+  <header class="xray-head"><h2>Station analysis</h2><small>sorted along the line</small></header>
+  <div class="overflow-auto">
+  <table class="striped compact">
+    <thead><tr><th>Station</th><th>Level</th><th>Records (assumed)</th><th>Minutes</th><th>Top downtime codes</th><th>Rejects</th></tr></thead>
+    <tbody>
+    {% for st in x.stations + x.off_line if st.no or st.events or st.defects %}
+      <tr id="st-{{ st.no or ('off-' ~ loop.index) }}">
+        <td>{% if st.no %}{{ "%02d" % st.no }} {% endif %}{{ st.name }}</td>
+        <td><span class="flag lvl-{{ st.level }}">{{ level_text(st.level) }}</span></td>
+        <td>{{ st.events }}{% if st.assumed_events %} ({{ st.assumed_events }}){% endif %}</td>
+        <td>{{ st.minutes | num }}</td>
+        <td>{% for c in st.top_stops[:3] %}<span title="{{ c.name }}">{{ c.code }} · {{ c.minutes | num }} min</span>{% if not loop.last %}, {% endif %}{% else %}—{% endfor %}</td>
+        <td>{% for c in st.top_rejects[:3] %}<span title="{{ c.name }}">{{ c.code }} · {{ c.qty }}</span>{% if not loop.last %}, {% endif %}{% else %}—{% endfor %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p><small>Off-line rows (material supply, tooling, other) are shown when they have records.</small></p>
+</article>
+{% endif %}
+{% endblock %}

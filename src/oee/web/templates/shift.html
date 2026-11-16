@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{# Shift Dashboard (TASK §7 A–E). Všetky čísla sú zo ShiftAnalytics; šablóna ich iba formátuje. #}
+{% block head %}<script src="/static/vendor/chart.umd.min.js" defer></script><script src="/static/shift_charts.js" defer></script>{% endblock %}
+{% block content %}
+{% if not shifts %}
+<article class="notice"><p><strong>No shifts yet.</strong> Report hours in <a href="/report">Hourly Reporting</a>
+  or import the dataset on the <a href="/import">Import</a> page.</p></article>
+{% else %}
+<form method="get" action="/shift" class="actions inline-form">
+  <label>Shift
+    <select name="id">
+      {% for s in shifts %}
+      <option value="{{ s.shift_id }}"{% if a and a.shift.shift_id == s.shift_id %} selected{% endif %}>{{ s.shift_id }} · {{ s.date.isoformat() }} ({{ s.status }})</option>
+      {% endfor %}
+    </select></label>
+  <button type="submit">Show</button>
+</form>
+{% endif %}
+
+{% if a %}
+{% set h = a.shift %}
+{% set k = a.kpi %}
+{% set t = a.target_vs_actual %}
+{% set w = a.waterfall_pcs %}
+{% set base = "/shift/" ~ h.shift_id %}
+{% set qs = "sort=" ~ sort ~ "&group=" ~ group ~ "&pareto=" ~ pareto_by %}
+
+<article class="shift-header">
+  <div><small>Shift</small><strong>{{ h.shift_id }}</strong></div>
+  <div><small>Date</small><strong>{{ h.date.isoformat() }} {{ h.weekday }}</strong></div>
+  <div><small>Line</small><strong>{{ h.line }}</strong></div>
+  <div><small>Product</small><strong>{{ h.product }}</strong></div>
+  <div><small>Status</small><strong>{{ status }}</strong></div>
+  <div><small>Computed</small><strong>{{ h.computed_at.strftime("%Y-%m-%d %H:%M") }} UTC</strong></div>
+</article>
+{% if h.provisional %}<p><small>Provisional: the shift is not complete yet; numbers cover submitted hours only.</small></p>{% endif %}
+
+<section id="f">
+  <h2>F · Shift summary</h2>
+  <div hx-get="/ai/shift_summary/{{ h.shift_id | urlencode }}" hx-trigger="load" hx-swap="outerHTML" class="ai-block">
+    <small aria-busy="true">Loading summary…</small>
+  </div>
+</section>
+
+<section id="a">
+  <h2>A · Overall result</h2>
+  <div class="kpi-cards">
+    <article class="kpi main {{ k.oee_status or '' }}">
+      <small>OEE</small><strong>{{ k.oee | pct if k.oee is not none else "—" }}</strong>
+      {% if k.oee_status %}<span>{{ "Goal met ✓" if k.oee_status == "goal_met" else "Below goal ✗" }} {{ k.oee_gap_pp | pp }}</span>{% endif %}
+      <small title="OEE = Good / Target = A × P × Q">goal {{ a.model.target_oee | pct }}</small>
+    </article>
+    <article class="kpi"><small>Availability</small><strong>{{ k.availability | pct if k.availability is not none else "—" }}</strong>
+      <span title="Downtime loss in pieces">Downtime {{ (-w.technical_losses) | signed }} pcs</span></article>
+    <article class="kpi"><small>Performance</small><strong>{{ k.performance | pct if k.performance is not none else "—" }}</strong>
+      <span title="Speed loss in pieces">Speed {{ (-w.speed_loss) | signed }} pcs</span></article>
+    <article class="kpi"><small>Quality</small><strong>{{ k.quality | pct if k.quality is not none else "—" }}</strong>
+      <span title="Rejected pieces">Rejects {{ (-w.quality_loss) | signed }} pcs</span></article>
+  </div>
+</section>
+
+<section id="b">
+  <h2>B · Target vs actual</h2>
+  <div class="chart-box"><canvas id="waterfall-chart" data-url="/api/shift/{{ h.shift_id }}/charts" aria-label="Waterfall from target to good pieces"></canvas></div>
+  <div class="overflow-auto">
+    <table class="striped compact">
+      <tbody>
+        <tr><th>Target</th><td>{{ w.target | num }}</td><td></td></tr>
+        <tr><th>Technical losses</th><td>{{ (-w.technical_losses) | signed }}</td><td>{{ a.technical_losses.total_min | num }} min · {{ a.technical_losses.events }} events</td></tr>
+        <tr><th>Speed loss</th><td>{{ (-w.speed_loss) | signed }}</td><td></td></tr>
+        <tr><th>Produced</th><td>{{ t.produced_pcs }}</td><td>{{ t.production_vs_target | pct if t.production_vs_target is not none else "—" }}</td></tr>
+        <tr><th>Rejects</th><td>{{ (-w.quality_loss) | signed }}</td><td>{{ a.quality.reject_rate | pct if a.quality.reject_rate is not none else "" }}</td></tr>
+        <tr><th>Good</th><td>{{ w.good | num }}</td><td>{{ t.good_vs_target | pct if t.good_vs_target is not none else "—" }}</td></tr>
+        <tr><th>Deviation from target</th><td>{{ t.deviation_from_target_pcs | signed }}</td><td></td></tr>
+        <tr><th>OEE goal ({{ a.model.target_oee | pct }})</th><td>{{ t.oee_goal_pcs | num }}</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="c">
+  <h2>C · During the shift</h2>
+  <div class="chart-box"><canvas id="hourly-chart" aria-label="Hourly OEE with goal line"></canvas></div>
+  <div class="overflow-auto">
+  <table class="striped compact">
+    <thead><tr><th>Hour</th><th>Slot</th><th>Planned min</th><th>Target</th><th>Produced</th><th>Rejects</th><th>Downtime min</th><th>OEE</th><th></th></tr></thead>
+    <tbody>
+    {% for r in a.hourly %}
+      <tr data-hour="{{ r.hour_no }}" data-flags="{{ r.flags | join(' ') }}">
+        <td>{{ r.hour_no }}</td><td>{{ r.slot }}</td><td>{{ r.planned_min | num }}</td><td>{{ r.target_pcs | num }}</td>
+        {% if r.produced is none %}
+        <td colspan="4"><em>not submitted</em></td>
+        {% else %}
+        <td>{{ r.produced }}</td><td>{{ r.rejects }}</td><td>{{ r.downtime_min | num }}</td>
+        <td class="{{ 'bad' if 'below_goal' in r.flags else '' }}">{{ r.oee | pct if r.oee is not none else "—" }}</td>
+        {% endif %}
+        <td>{% if 'below_goal' in r.flags %}<span title="Below OEE goal">▼</span>{% endif %}{% if 'downtime_ge_5_min' in r.flags %} <span title="Downtime ≥ 5 min">⏱</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="d">
+  <h2>D · Alarms &amp; issues</h2>
+  <p class="toolbar">
+    Sort: {% for key, label in [("time", "time"), ("duration", "duration"), ("impact", "impact")] %}
+      <a href="{{ base }}?sort={{ key }}&group={{ group }}&pareto={{ pareto_by }}#d"{% if sort == key %} aria-current="true"{% endif %}>{{ label }}</a>{% if not loop.last %} · {% endif %}
+    {% endfor %}
+    &nbsp;|&nbsp;
+    {% if group == "type" %}<a href="{{ base }}?sort={{ sort }}&group=none&pareto={{ pareto_by }}#d">Ungroup</a>
+    {% else %}<a href="{{ base }}?sort={{ sort }}&group=type&pareto={{ pareto_by }}#d">Group by type</a>{% endif %}
+  </p>
+  {% macro issue_rows(rows) %}
+    {% for i in rows %}
+    <tr data-issue-row="{{ i.issue_id }}">
+      <td>{{ i.hour_no }}</td><td>{{ i.start_time.strftime("%H:%M") if i.start_time else "—" }}</td>
+      <td>{{ i.category }}</td><td>{{ i.issue_type }}</td><td>{{ i.name }}</td>
+      <td>{{ i.duration_min | num }}</td><td>{{ i.lost_pcs | num }}</td><td>{{ i.share_of_target | pct2 if i.share_of_target is not none else "—" }}</td>
+      <td>{% for f in i.flags %}<span class="flag">{{ "> 5 min" if f == "over_5_min" else f }}</span> {% endfor %}
+        {% for q in linked.get(i.issue_type, []) %}<a class="flag linked" href="/correlations?view=month&month={{ links_month }}&cause={{ i.issue_type | urlencode }}&effect={{ q | urlencode }}" title="Correlated defect in {{ links_month }} (not a proven cause)">linked defect {{ q }}</a> {% endfor %}</td>
+      <td>{{ i.comment or "" }}</td>
+    </tr>
+    {% endfor %}
+  {% endmacro %}
+  {% set head %}<thead><tr><th>Hour</th><th>Start</th><th>Category</th><th>Code</th><th>Name</th><th>Min</th><th>Lost pcs</th><th>% target</th><th>Flags</th><th>Comment</th></tr></thead>{% endset %}
+  {% if not issues %}
+  <p>No downtime reported.</p>
+  {% elif groups %}
+    {% for g in groups %}
+    <details open>
+      <summary>{{ g.code }} · {{ g.events }} event{{ "" if g.events == 1 else "s" }} · {{ g.total_min | num }} min — {{ g.name }} ({{ g.category }})</summary>
+      <div class="overflow-auto"><table class="striped compact">{{ head }}<tbody>{{ issue_rows(g.rows) }}</tbody></table></div>
+    </details>
+    {% endfor %}
+  {% else %}
+  <div class="overflow-auto"><table class="striped compact">{{ head }}<tbody>{{ issue_rows(issues) }}</tbody></table></div>
+  {% endif %}
+
+  <h3>Rejects by defect type</h3>
+  {% if a.quality.by_defect %}
+  <table class="striped compact">
+    <thead><tr><th>Defect</th><th>Qty</th></tr></thead>
+    <tbody>{% for d in a.quality.by_defect %}<tr><td>{{ d.code or "Unspecified defect" }}</td><td>{{ d.qty }}</td></tr>{% endfor %}</tbody>
+  </table>
+  <p><small>By hour: {% for q in a.quality.by_hour %}{{ loop.index }}: {{ "—" if q is none else q }}{% if not loop.last %} · {% endif %}{% endfor %}</small></p>
+  {% else %}<p>No rejects.</p>{% endif %}
+</section>
+
+<section id="e">
+  <h2>E · Main production losses</h2>
+  <p class="toolbar">Pareto by:
+    <a href="{{ base }}?sort={{ sort }}&group={{ group }}&pareto=type#e"{% if pareto_by == "type" %} aria-current="true"{% endif %}>type</a> ·
+    <a href="{{ base }}?sort={{ sort }}&group={{ group }}&pareto=category#e"{% if pareto_by == "category" %} aria-current="true"{% endif %}>category</a></p>
+  <div class="chart-box"><canvas id="pareto-chart" data-mode="{{ pareto_by }}" aria-label="Pareto of losses in pieces"></canvas></div>
+  <table class="striped compact">
+    <thead><tr><th>Loss</th><th>Pcs</th><th>Share of all losses</th></tr></thead>
+    <tbody>
+    {% for b in buckets %}
+      <tr><td>{{ bucket_label(b.bucket) }}</td><td>{{ b.pcs | num }}</td><td>{{ b.share_of_losses | pct if b.share_of_losses is not none else "—" }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p><small><em>Unattributed speed loss</em> = pieces the line could have made in its run time (planned time minus
+  reported stops) but did not, with no problem reported for them: micro-stops, slow cycles, retests.
+  Report a stop as a problem and its pieces move from here to that problem.</small></p>
+</section>
+{% endif %}
+{% endblock %}

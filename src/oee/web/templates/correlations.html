@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{# Korelácie prestoj → neskorší zmätok (TASK §8.6). Lift, okno, podpora = PeriodAnalytics.problem_links (kód).
+   Časová os = zaznamenané udalosti: prestoj s presným časom, zmätky po hodinách. Korelácia ≠ dokázaná príčina. #}
+{% block content %}
+{% if not shifts %}
+<article class="notice"><p><strong>No shifts yet.</strong> Report hours in <a href="/report">Hourly Reporting</a>
+  or import the dataset on the <a href="/import">Import</a> page.</p></article>
+{% else %}
+<form method="get" action="/correlations" class="xray-picker">
+  <nav class="seg" aria-label="Perspective">
+    {% for v, title in [("week", "Week"), ("month", "Month")] %}
+    <a href="/correlations?view={{ v }}"{% if view == v %} aria-current="true"{% endif %}>{{ title }}</a>
+    {% endfor %}
+  </nav>
+  <input type="hidden" name="view" value="{{ view }}">
+  <label>{{ view | capitalize }}
+    <select name="{{ view }}" onchange="this.form.submit()">
+      {% for k in options %}<option value="{{ k }}"{% if k == chosen %} selected{% endif %}>{{ k }}</option>{% endfor %}
+    </select></label>
+  <noscript><button type="submit">Show</button></noscript>
+</form>
+
+{% set p = period %}
+<p class="lead-note"><strong>Which problem comes first?</strong> A downtime that is regularly followed by more rejects
+  may be the real cause — fixing it can remove the later defect too. The window is the hour of the downtime and the
+  next hour of the same shift. <em>A correlation is not a proven cause</em> — check it on the line.
+  <small>{{ view | capitalize }} {{ chosen }} · {{ p.period.shifts_completed }} completed shifts · {{ p.problem_links | length }} links
+    (support ≥ 3 downtimes, ≥ 3 defects in the window, lift ≥ 2).</small></p>
+
+{% if not p.problem_links %}
+<article class="notice"><p><strong>No links in this period</strong> (or not enough data). Try the whole month.</p></article>
+{% else %}
+{% set sel = matrix.selected %}
+<div id="corr">
+{% set base_url = "/correlations?view=" ~ view ~ "&" ~ view ~ "=" ~ chosen %}
+<div class="links-grid" id="pair">
+  <article class="links-card">
+    <h3>Which pairs repeat</h3>
+    <div class="overflow-auto">
+    <table class="link-matrix">
+      <thead><tr><th>Downtime ↓ · Defect →</th>{% for q in matrix.effects %}<th title="{{ code_names.get(q, q) }}">{{ q }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for st in matrix.causes %}
+        <tr><th title="{{ code_names.get(st, st) }}">{{ st }}</th>
+        {% for q in matrix.effects %}{% set c = matrix.cells.get((st, q)) %}
+          <td>{% if c %}<a href="{{ base_url }}&cause={{ st | urlencode }}&effect={{ q | urlencode }}"
+              hx-get="{{ base_url }}&cause={{ st | urlencode }}&effect={{ q | urlencode }}" hx-select="#corr" hx-target="#corr"
+              hx-swap="outerHTML" hx-push-url="true"
+              class="cell conf-{{ c.confidence }}{% if c is sameas sel %} selected{% endif %}"
+              {% if c is sameas sel %}aria-current="true"{% endif %}
+              title="{{ c.cause }} → {{ c.effect }}: {{ c.q_in_window }} defects in window, confidence {{ c.confidence }}">{{ c.lift | num1 if c.lift is not none else "—" }}×</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+        {% endfor %}</tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p><small>Number = how many times more often the defect appears after this downtime than elsewhere (lift).
+      Darker = higher confidence. Dash = not a link. Click a cell to inspect the pair.</small></p>
+  </article>
+
+  <article class="links-card pair-card" data-cause="{{ sel.cause }}" data-effect="{{ sel.effect }}">
+    <p class="eyebrow">Selected pair</p>
+    <h3>{{ sel.cause }} → {{ sel.effect }}</h3>
+    <p><small>{{ code_names.get(sel.cause, sel.cause) }} → {{ code_names.get(sel.effect, sel.effect) }}<br>
+      {{ "Same process" if sel.link_type == "same_process" else "Different processes — check" }}{% if sel.process %} · {{ sel.process }}{% endif %}
+      · {{ sel.support }} downtime events</small></p>
+    <p><span class="flag conf-{{ sel.confidence }}">Confidence: {{ sel.confidence }}</span></p>
+    {% set top = [sel.rate_in_window, sel.base_rate] | max %}
+    <div class="rate"><span>Defect rate after the downtime</span><strong>{{ sel.rate_in_window | pct2 }}</strong></div>
+    <div class="bar"><i style="width: {{ (sel.rate_in_window / top * 100) if top else 0 }}%"></i></div>
+    <div class="rate"><span>Defect rate elsewhere</span><strong>{{ sel.base_rate | pct2 }}</strong></div>
+    <div class="bar base"><i style="width: {{ (sel.base_rate / top * 100) if top else 0 }}%"></i></div>
+    <p><strong>{{ sel.lift | num1 if sel.lift is not none else "—" }}× more often</strong> · {{ sel.q_in_window }} defects in {{ sel.produced_in_window }} pcs<br>
+      <small>{{ sel.combined_impact_pcs | num1 }} pcs combined impact · {{ sel.extra_rejects | num1 }} extra rejects (estimate)</small></p>
+  </article>
+</div>
+
+<article class="links-card">
+  <p class="eyebrow">Chain of events</p>
+  <h3>Where the failure began</h3>
+  <p><small>One row per {{ sel.cause }} downtime, time runs left → right over its window.
+    <span class="tl-dot stop inline"></span>—<span class="tl-dot stop inline"></span> downtime from start to end ·
+    <span class="tl-dot defect inline"></span>—<span class="tl-dot defect inline"></span> hour with {{ sel.effect }} rejects (rejects are reported per hour, not per minute).</small></p>
+  {% for o in occurrences %}
+  <div class="tl-row">
+    <div class="tl-label"><a href="/shift/{{ o.shift_id | urlencode }}">{{ o.day.strftime("%a %d.%m.") }}</a>
+      <small>{{ o.stop_min | num }} min{% if o.defect_qty %} · {{ o.defect_qty }} pcs {{ sel.effect }}{% endif %}</small></div>
+    <div class="tl-track">
+      <span class="tl-tick" style="left: 0">{{ o.window_start.strftime("%H:%M") }}</span>
+      <span class="tl-tick mid" style="left: 50%">{{ (o.window_start + (o.window_end - o.window_start) / 2).strftime("%H:%M") }}</span>
+      <span class="tl-tick end" style="left: 100%">{{ o.window_end.strftime("%H:%M") }}</span>
+      <div class="tl-lane">
+        {% set x1 = o.pos(o.stop_start) %}{% set x2 = [o.pos(o.stop_end), x1 + 1] | max %}
+        <span class="tl-line stop" style="left: {{ x1 }}%; width: {{ x2 - x1 }}%"></span>
+        <span class="tl-dot stop start" style="left: {{ x1 }}%" title="{{ sel.cause }} starts"></span>
+        <span class="tl-dot stop" style="left: {{ x2 }}%" title="{{ sel.cause }} ends"></span>
+        <span class="tl-note" style="left: {{ x1 }}%"><b>{{ o.stop_start.strftime("%H:%M") if o.stop_time_known else "time n/a" }}–{{ o.stop_end.strftime("%H:%M") }} · {{ sel.cause }}</b> downtime {{ o.stop_min | num }} min</span>
+      </div>
+      <div class="tl-lane">
+        {% for b in o.defects %}{% set d1 = o.pos(b.start) %}{% set d2 = o.pos(b.end) %}
+        <span class="tl-line defect" style="left: {{ d1 }}%; width: {{ d2 - d1 }}%"></span>
+        <span class="tl-dot defect" style="left: {{ d1 }}%"></span>
+        <span class="tl-dot defect" style="left: {{ d2 }}%"></span>
+        <span class="tl-note" style="left: {{ d1 }}%"><b>{{ b.qty }} × {{ sel.effect }}</b> rejects {{ b.start.strftime("%H:%M") }}–{{ b.end.strftime("%H:%M") }}</span>
+        {% else %}<span class="tl-note none">no {{ sel.effect }} in the window</span>{% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</article>
+
+{% if view == "month" %}
+<div hx-get="/ai/link_explanation/{{ chosen | urlencode }}/{{ sel.cause | urlencode }}/{{ sel.effect | urlencode }}" hx-trigger="load" hx-swap="outerHTML" class="ai-block">
+  <small aria-busy="true">Loading explanation…</small>
+</div>
+{% endif %}
+
+</div>
+
+<details>
+  <summary>All links in this period (table)</summary>
+  <div class="overflow-auto">
+  <table class="striped compact">
+    <thead><tr><th>Downtime</th><th>→ Defect</th><th>Support</th><th>Defects in window</th><th>Produced in window</th>
+      <th>Rate in window</th><th>Base rate</th><th>Lift</th><th>Extra rejects</th><th>Type</th><th>Confidence</th><th>Combined impact pcs</th></tr></thead>
+    <tbody>
+    {% for l in p.problem_links %}
+      <tr data-cause="{{ l.cause }}" data-effect="{{ l.effect }}">
+        <td>{{ l.cause }}</td><td>{{ l.effect }}</td><td>{{ l.support }}</td><td>{{ l.q_in_window }}</td><td>{{ l.produced_in_window }}</td>
+        <td>{{ l.rate_in_window | pct2 }}</td><td>{{ l.base_rate | pct2 }}</td>
+        <td>{{ l.lift | num if l.lift is not none else "—" }}×</td><td>{{ l.extra_rejects | num1 }}</td>
+        <td>{{ "same process" if l.link_type == "same_process" else "cross process — check" }}{% if l.process %} ({{ l.process }}){% endif %}</td>
+        <td><span class="flag conf-{{ l.confidence }}">{{ l.confidence }}</span></td>
+        <td>{{ l.combined_impact_pcs | num1 }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+{% endif %}
+{% endif %}
+{% endblock %}

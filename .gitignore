@@ -1,7 +1,34 @@
-﻿node_modules/
-dist/
-venv/
-.venv/
+# Python
 __pycache__/
 *.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Nástroje
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Lokálne prostredie a dáta
 .env
+*.db
+*.sqlite
+*.sqlite3
+data/local/
+
+# Lokálne nastavenia Claude Code (osobné)
+.claude/settings.local.json
+
+# Office dočasné súbory
+~$*.xlsx
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

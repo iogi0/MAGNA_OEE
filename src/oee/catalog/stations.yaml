@@ -1,0 +1,27 @@
+# Pozor: kľúč `nr` (nie `no` — YAML 1.1 ho číta ako false).
+# Stanice linky L01 a mapovanie kategórií kódov → stanica (TASK §2, slajd 7).
+# Je to NASTAVENIE (predpoklad z ilustrácie linky), nie dokázaný fakt: v dátach priamy vzťah stanica ↔ kód nie je.
+# Kategória mapovaná na viac staníc = „assumed" záznam na každej z nich (Line X-Ray ho tak označí).
+stations:
+  - {nr: 1, name: Housing loading, kind: robot, categories: [robot]}
+  - {nr: 2, name: Motor insertion, kind: press, categories: [pressing]}
+  - {nr: 3, name: Camera inspection, kind: camera, categories: [camera]}
+  - {nr: 4, name: Motor tightening I, kind: screw, categories: [screwdriving]}
+  - {nr: 5, name: Motor tightening II, kind: screw, categories: [screwdriving]}
+  - {nr: 6, name: System rotation, kind: rotate, categories: [general]}
+  - {nr: 7, name: Inverter insertion, kind: press, categories: [pressing, general]}
+  - {nr: 8, name: Inverter tightening, kind: screw, categories: [screwdriving]}
+  - {nr: 9, name: Leak test, kind: leak, categories: [leak_test]}
+  - {nr: 10, name: Transfer to EOL, kind: robot, categories: [robot]}
+
+# Mimo konvejera (TASK §2: Zasobovanie, Nastroj) a kódy bez stanice.
+off_line:
+  - {name: Material supply, categories: [material_shortage]}
+  - {name: Tooling, categories: [tool]}
+  - {name: Other / unassigned, categories: [other]}
+
+# Úroveň stanice z prestojov (platí najvyššia splnená): počet záznamov ALEBO minúty.
+levels:
+  low: {events: 1, minutes: 0}
+  elevated: {events: 2, minutes: 15}
+  high: {events: 3, minutes: 25}
